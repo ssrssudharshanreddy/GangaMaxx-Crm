@@ -15,7 +15,7 @@ const staffRoles = new Set(['owner', 'sales_admin', 'salesman', 'warehouse_staff
 const loadFirebaseUserProfile = async (firebaseUser) => {
   const userSnap = await getDoc(doc(firestore, 'users', firebaseUser.uid));
   if (!userSnap.exists()) {
-    throw new Error('No user profile document exists for this Firebase account.');
+    throw new Error(`No user profile document exists for this Firebase account (UID: ${firebaseUser.uid}).`);
   }
 
   const profile = userSnap.data();
