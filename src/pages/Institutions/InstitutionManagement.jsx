@@ -5,7 +5,7 @@ import { db, logAuditAction } from '../../services';
 import { PageHeader, Card, Button, Input, Select, Badge, Modal, EmptyState, Textarea } from '../../components/ui/ui-components';
 import { Building2, Plus, Pencil } from 'lucide-react';
 import { firebaseConfig, firestore } from '../../config/firebase';
-import { initializeApp } from 'firebase/app';
+import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, setDoc, updateDoc, collection, addDoc } from 'firebase/firestore';
 import { toast } from 'react-hot-toast';
@@ -153,7 +153,7 @@ export default function InstitutionManagement() {
           uid = userCredential.user.uid;
           await signOut(secondaryAuth);
         } finally {
-          await secondaryApp.delete();
+          await deleteApp(secondaryApp);
         }
 
         await setDoc(doc(firestore, 'users', uid), {
