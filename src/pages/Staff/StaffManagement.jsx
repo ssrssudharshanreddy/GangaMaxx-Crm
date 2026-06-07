@@ -20,7 +20,7 @@ const STATUSES = [
   { value: 'suspended', label: 'Suspended' },
 ];
 
-const emptyForm = { name: '', email: '', role: 'salesman', status: 'active', phoneNumber: '' };
+const emptyForm = { name: '', email: '', role: 'salesman', status: 'active', phoneNumber: '', password: '' };
 
 export default function StaffManagement() {
   const { user } = useAuth();
@@ -31,12 +31,13 @@ export default function StaffManagement() {
   const [search, setSearch] = useState('');
 
   const openAdd = () => { setEditing(null); setForm(emptyForm); setModalOpen(true); };
-  const openEdit = (member) => { setEditing(member); setForm({ name: member.name, email: member.email, role: member.role, status: member.status, phoneNumber: member.phoneNumber || '' }); setModalOpen(true); };
+  const openEdit = (member) => { setEditing(member); setForm({ name: member.name, email: member.email, role: member.role, status: member.status, phoneNumber: member.phoneNumber || '', password: '' }); setModalOpen(true); };
 
   const handleSave = () => {
     if (!form.name || !form.email) return;
     if (editing) {
-      db.updateStaff(editing.id, form);
+      const { email, password, ...editableForm } = form;
+      db.updateStaff(editing.id, editableForm);
       logAuditAction(user.id, user.email, user.role, 'update_staff', 'staff', editing.id, `Updated ${form.name}`);
     } else {
       const created = db.addStaff(form);
@@ -99,7 +100,10 @@ export default function StaffManagement() {
       <Modal open={modalOpen} title={editing ? 'Edit Staff' : 'Add Staff'} onClose={() => setModalOpen(false)}>
         <div className="flex flex-col gap-4">
           <Input label="Full Name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Ravi Kumar" />
-          <Input label="Email" required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@gangamaxx.com" />
+          <Input label="Email" required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@gangamaxx.com" disabled={!!editing} />
+          {!editing && (
+            <Input label="Temporary Password" required type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Enter temporary password" />
+          )}
           <Input label="Phone Number" value={form.phoneNumber} onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })} placeholder="+91 98765 43210" />
           <Select label="Role" required value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} options={ROLES} />
           <Select label="Status" required value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} options={STATUSES} />

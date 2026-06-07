@@ -26,7 +26,19 @@ const TERMS = [
   { value: 'net_45', label: 'Net 45' },
 ];
 
-const emptyForm = { name: '', type: 'hotel', taxId: '', address: '', status: 'pending_approval', creditLimit: 0, contractTerms: 'net_30' };
+const emptyForm = {
+  name: '',
+  type: 'hotel',
+  taxId: '',
+  address: '',
+  status: 'pending_approval',
+  creditLimit: 0,
+  contractTerms: 'net_30',
+  contactName: '',
+  contactEmail: '',
+  contactPhone: '',
+  contactPassword: ''
+};
 
 export default function InstitutionManagement() {
   const { user } = useAuth();
@@ -40,17 +52,50 @@ export default function InstitutionManagement() {
   const openAdd = () => { setEditing(null); setForm(emptyForm); setModalOpen(true); };
   const openEdit = (inst) => {
     setEditing(inst);
-    setForm({ name: inst.name || '', type: inst.type || 'hotel', taxId: inst.taxId || '', address: inst.address || '', status: inst.status || 'active', creditLimit: inst.creditLimit || 0, contractTerms: inst.contractTerms || 'net_30' });
+    setForm({
+      name: inst.name || '',
+      type: inst.type || 'hotel',
+      taxId: inst.taxId || '',
+      address: inst.address || '',
+      status: inst.status || 'active',
+      creditLimit: inst.creditLimit || 0,
+      contractTerms: inst.contractTerms || 'net_30',
+      contactName: inst.contactPerson?.name || '',
+      contactEmail: inst.contactPerson?.email || '',
+      contactPhone: inst.contactPerson?.phone || '',
+      contactPassword: ''
+    });
     setModalOpen(true);
   };
 
   const handleSave = () => {
     if (!form.name || !form.taxId) return;
+
+    const payload = {
+      name: form.name,
+      type: form.type,
+      taxId: form.taxId,
+      address: form.address,
+      status: form.status,
+      creditLimit: form.creditLimit,
+      contractTerms: form.contractTerms,
+      contactPerson: {
+        name: form.contactName,
+        email: form.contactEmail,
+        phone: form.contactPhone,
+      }
+    };
+
+    if (!editing && form.contactPassword) {
+      payload.contactPassword = form.contactPassword;
+    }
+
     if (editing) {
-      db.updateInstitution(editing.id, form);
+      payload.contactPerson.email = editing.contactPerson?.email || '';
+      db.updateInstitution(editing.id, payload);
       logAuditAction(user.id, user.email, user.role, 'update_institution', 'institution', editing.id, `Updated ${form.name}`);
     } else {
-      const created = db.addInstitution(form);
+      const created = db.addInstitution(payload);
       logAuditAction(user.id, user.email, user.role, 'create_institution', 'institution', created.id, `Created ${form.name}`);
     }
     setModalOpen(false);
@@ -125,7 +170,18 @@ export default function InstitutionManagement() {
             <Input label="Credit Limit (₹)" type="number" min="0" value={form.creditLimit} onChange={(e) => setForm({ ...form, creditLimit: Number(e.target.value) })} />
             <Select label="Payment Terms" value={form.contractTerms} onChange={(e) => setForm({ ...form, contractTerms: e.target.value })} options={TERMS} />
           </div>
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="border-t border-[var(--border)] pt-4 mt-2">
+            <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Contact Person & Credentials</h3>
+            <div className="flex flex-col gap-4">
+              <Input label="Contact Name" value={form.contactName} onChange={(e) => setForm({ ...form, contactName: e.target.value })} placeholder="e.g. John Doe" />
+              <Input label="Contact Email" required type="email" value={form.contactEmail} onChange={(e) => setForm({ ...form, contactEmail: e.target.value })} placeholder="contact@institution.com" disabled={!!editing} />
+              {!editing && (
+                <Input label="Temporary Password" required type="password" value={form.contactPassword} onChange={(e) => setForm({ ...form, contactPassword: e.target.value })} placeholder="Enter temporary password" />
+              )}
+              <Input label="Contact Phone" value={form.contactPhone} onChange={(e) => setForm({ ...form, contactPhone: e.target.value })} placeholder="+91 99999 88888" />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 pt-4">
             <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
             <Button onClick={handleSave}>{editing ? 'Save Changes' : 'Create Institution'}</Button>
           </div>
