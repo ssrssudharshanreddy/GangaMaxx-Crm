@@ -57,7 +57,7 @@ service cloud.firestore {
 
     // Staff profile records used by the admin CRM.
     match /staff/{staffId} {
-      allow read: if isStaff();
+      allow read: if isAuthenticated();
       allow create, update: if isActive() && hasRole('owner');
       allow delete: if false;
     }
