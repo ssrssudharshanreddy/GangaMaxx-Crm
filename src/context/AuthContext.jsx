@@ -29,6 +29,7 @@ const loadFirebaseUserProfile = async (firebaseUser) => {
   return {
     id: firebaseUser.uid,
     email: firebaseUser.email,
+    name: profile.name || profile.displayName || firebaseUser.displayName || 'Staff Member',
     ...profile,
   };
 };
