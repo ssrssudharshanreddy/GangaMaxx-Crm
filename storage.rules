@@ -1,0 +1,45 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helpers
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isStaff() {
+      return isAuthenticated() && getUserData().status == 'active' && getUserData().role in [
+        'owner', 'sales_admin', 'salesman', 'warehouse_staff', 'accounts_manager', 'support_staff', 'compliance_admin'
+      ];
+    }
+    
+    function belongsToInstitution(instId) {
+      return isAuthenticated() && getUserData().status == 'active' && getUserData().institutionId == instId;
+    }
+
+    function isAllowedDocument() {
+      return request.resource.size < 10 * 1024 * 1024 &&
+        request.resource.contentType in ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
+    }
+
+    // Compliance documents scoping
+    match /compliance/{instId}/{allPaths=**} {
+      allow read: if isAuthenticated() && (isStaff() || belongsToInstitution(instId));
+      allow write: if isStaff() && isAllowedDocument();
+    }
+
+    // Payments proofs upload scoping
+    match /receipts/{instId}/{allPaths=**} {
+      allow read: if isAuthenticated() && (isStaff() || belongsToInstitution(instId));
+      allow write: if isAuthenticated() && (isStaff() || belongsToInstitution(instId)) && isAllowedDocument();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
