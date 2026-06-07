@@ -4,6 +4,11 @@ import { useAuth } from '../../context/AuthContext';
 import { db, logAuditAction } from '../../services';
 import { PageHeader, Card, Button, Input, Select, Badge, Modal, EmptyState, Textarea } from '../../components/ui/ui-components';
 import { Building2, Plus, Pencil } from 'lucide-react';
+import { firebaseConfig, firestore } from '../../config/firebase';
+import { initializeApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { doc, setDoc, updateDoc, collection, addDoc } from 'firebase/firestore';
+import { toast } from 'react-hot-toast';
 
 const TYPES = [
   { value: 'hotel', label: 'Hotel' },
@@ -48,8 +53,9 @@ export default function InstitutionManagement() {
   const [form, setForm] = useState(emptyForm);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [saveLoading, setSaveLoading] = useState(false);
 
-  const openAdd = () => { setEditing(null); setForm(emptyForm); setModalOpen(true); };
+  const openAdd = () => { setEditing(null); setForm(emptyForm); setSaveLoading(false); setModalOpen(true); };
   const openEdit = (inst) => {
     setEditing(inst);
     setForm({
@@ -65,40 +71,123 @@ export default function InstitutionManagement() {
       contactPhone: inst.contactPerson?.phone || '',
       contactPassword: ''
     });
+    setSaveLoading(false);
     setModalOpen(true);
   };
 
-  const handleSave = () => {
-    if (!form.name || !form.taxId) return;
+  const handleSave = async () => {
+    if (!form.name || !form.taxId) {
+      toast.error('Institution Name and GSTIN / Tax ID are required.');
+      return;
+    }
 
-    const payload = {
-      name: form.name,
-      type: form.type,
-      taxId: form.taxId,
-      address: form.address,
-      status: form.status,
-      creditLimit: form.creditLimit,
-      contractTerms: form.contractTerms,
-      contactPerson: {
-        name: form.contactName,
-        email: form.contactEmail,
-        phone: form.contactPhone,
+    if (!editing && (!form.contactEmail || !form.contactPassword)) {
+      toast.error('Contact Email and Temporary Password are required for onboarding.');
+      return;
+    }
+
+    setSaveLoading(true);
+    try {
+      if (editing) {
+        const payload = {
+          name: form.name,
+          type: form.type,
+          taxId: form.taxId,
+          address: form.address,
+          status: form.status,
+          creditLimit: Number(form.creditLimit || 0),
+          contractTerms: form.contractTerms,
+          contactPerson: {
+            name: form.contactName,
+            email: editing.contactPerson?.email || '',
+            phone: form.contactPhone,
+            uid: editing.contactPerson?.uid || '',
+          }
+        };
+
+        await updateDoc(doc(firestore, 'institutions', editing.id), payload);
+
+        const contactUid = editing.contactPerson?.uid;
+        if (contactUid) {
+          await updateDoc(doc(firestore, 'users', contactUid), {
+            name: form.contactName,
+            phoneNumber: form.contactPhone || '',
+            status: form.status === 'active' ? 'active' : (form.status === 'suspended' ? 'suspended' : 'pending_approval'),
+          });
+        }
+
+        const creditAccount = db.getCreditAccounts().find((c) => c.institutionId === editing.id);
+        if (creditAccount) {
+          await updateDoc(doc(firestore, 'creditAccounts', creditAccount.id), {
+            institutionName: form.name,
+            creditLimit: Number(form.creditLimit || 0),
+          });
+        }
+
+        logAuditAction(user.id, user.email, user.role, 'update_institution', 'institution', editing.id, `Updated ${form.name}`);
+        toast.success('Institution updated successfully.');
+        setModalOpen(false);
+      } else {
+        const instRef = await addDoc(collection(firestore, 'institutions'), {
+          name: form.name,
+          type: form.type,
+          taxId: form.taxId,
+          address: form.address,
+          status: form.status,
+          creditLimit: Number(form.creditLimit || 0),
+          contractTerms: form.contractTerms,
+          contactPerson: {
+            name: form.contactName,
+            email: form.contactEmail,
+            phone: form.contactPhone,
+          },
+          createdAt: new Date().toISOString().slice(0, 10),
+        });
+        const institutionId = instRef.id;
+
+        const secondaryApp = initializeApp(firebaseConfig, 'SecondaryInstitution');
+        const secondaryAuth = getAuth(secondaryApp);
+        let uid;
+        try {
+          const userCredential = await createUserWithEmailAndPassword(secondaryAuth, form.contactEmail, form.contactPassword);
+          uid = userCredential.user.uid;
+          await signOut(secondaryAuth);
+        } finally {
+          await secondaryApp.delete();
+        }
+
+        await setDoc(doc(firestore, 'users', uid), {
+          name: form.contactName,
+          email: form.contactEmail,
+          phoneNumber: form.contactPhone || '',
+          role: 'customer_owner',
+          status: form.status === 'active' ? 'active' : 'pending_approval',
+          institutionId: institutionId,
+          createdAt: new Date().toISOString().slice(0, 10),
+        });
+
+        await updateDoc(doc(firestore, 'institutions', institutionId), {
+          'contactPerson.uid': uid,
+        });
+
+        await addDoc(collection(firestore, 'creditAccounts'), {
+          institutionId: institutionId,
+          institutionName: form.name,
+          creditLimit: Number(form.creditLimit || 0),
+          outstanding: 0,
+          createdAt: new Date().toISOString().slice(0, 10),
+        });
+
+        logAuditAction(user.id, user.email, user.role, 'create_institution', 'institution', institutionId, `Created ${form.name}`);
+        toast.success('Institution and user account created successfully.');
+        setModalOpen(false);
       }
-    };
-
-    if (!editing && form.contactPassword) {
-      payload.contactPassword = form.contactPassword;
+    } catch (err) {
+      console.error(err);
+      toast.error(err.message || 'Failed to save institution.');
+    } finally {
+      setSaveLoading(false);
     }
-
-    if (editing) {
-      payload.contactPerson.email = editing.contactPerson?.email || '';
-      db.updateInstitution(editing.id, payload);
-      logAuditAction(user.id, user.email, user.role, 'update_institution', 'institution', editing.id, `Updated ${form.name}`);
-    } else {
-      const created = db.addInstitution(payload);
-      logAuditAction(user.id, user.email, user.role, 'create_institution', 'institution', created.id, `Created ${form.name}`);
-    }
-    setModalOpen(false);
   };
 
   const filtered = institutions.filter((inst) => {
@@ -157,36 +246,37 @@ export default function InstitutionManagement() {
         </Card>
       )}
 
-      <Modal open={modalOpen} title={editing ? 'Edit Institution' : 'Add Institution'} onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen} title={editing ? 'Edit Institution' : 'Add Institution'} onClose={() => !saveLoading && setModalOpen(false)}>
         <div className="flex flex-col gap-4">
-          <Input label="Institution Name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Sunrise Facilities" />
+          <Input label="Institution Name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Sunrise Facilities" disabled={saveLoading} />
           <div className="grid grid-cols-2 gap-4">
-            <Select label="Type" required value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} options={TYPES} />
-            <Select label="Status" required value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} options={STATUSES} />
+            <Select label="Type" required value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} options={TYPES} disabled={saveLoading} />
+            <Select label="Status" required value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} options={STATUSES} disabled={saveLoading} />
           </div>
-          <Input label="GSTIN / Tax ID" required value={form.taxId} onChange={(e) => setForm({ ...form, taxId: e.target.value })} placeholder="27ABCDE1234F2Z5" />
-          <Textarea label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Full shipping address" />
+          <Input label="GSTIN / Tax ID" required value={form.taxId} onChange={(e) => setForm({ ...form, taxId: e.target.value })} placeholder="27ABCDE1234F2Z5" disabled={saveLoading} />
+          <Textarea label="Address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Full shipping address" disabled={saveLoading} />
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Credit Limit (₹)" type="number" min="0" value={form.creditLimit} onChange={(e) => setForm({ ...form, creditLimit: Number(e.target.value) })} />
-            <Select label="Payment Terms" value={form.contractTerms} onChange={(e) => setForm({ ...form, contractTerms: e.target.value })} options={TERMS} />
+            <Input label="Credit Limit (₹)" type="number" min="0" value={form.creditLimit} onChange={(e) => setForm({ ...form, creditLimit: Number(e.target.value) })} disabled={saveLoading} />
+            <Select label="Payment Terms" value={form.contractTerms} onChange={(e) => setForm({ ...form, contractTerms: e.target.value })} options={TERMS} disabled={saveLoading} />
           </div>
           <div className="border-t border-[var(--border)] pt-4 mt-2">
             <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Contact Person & Credentials</h3>
             <div className="flex flex-col gap-4">
-              <Input label="Contact Name" value={form.contactName} onChange={(e) => setForm({ ...form, contactName: e.target.value })} placeholder="e.g. John Doe" />
-              <Input label="Contact Email" required type="email" value={form.contactEmail} onChange={(e) => setForm({ ...form, contactEmail: e.target.value })} placeholder="contact@institution.com" disabled={!!editing} />
+              <Input label="Contact Name" value={form.contactName} onChange={(e) => setForm({ ...form, contactName: e.target.value })} placeholder="e.g. John Doe" disabled={saveLoading} />
+              <Input label="Contact Email" required type="email" value={form.contactEmail} onChange={(e) => setForm({ ...form, contactEmail: e.target.value })} placeholder="contact@institution.com" disabled={saveLoading || !!editing} />
               {!editing && (
-                <Input label="Temporary Password" required type="password" value={form.contactPassword} onChange={(e) => setForm({ ...form, contactPassword: e.target.value })} placeholder="Enter temporary password" />
+                <Input label="Temporary Password" required type="password" value={form.contactPassword} onChange={(e) => setForm({ ...form, contactPassword: e.target.value })} placeholder="Enter temporary password" disabled={saveLoading} />
               )}
-              <Input label="Contact Phone" value={form.contactPhone} onChange={(e) => setForm({ ...form, contactPhone: e.target.value })} placeholder="+91 99999 88888" />
+              <Input label="Contact Phone" value={form.contactPhone} onChange={(e) => setForm({ ...form, contactPhone: e.target.value })} placeholder="+91 99999 88888" disabled={saveLoading} />
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-4">
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave}>{editing ? 'Save Changes' : 'Create Institution'}</Button>
+            <Button variant="secondary" onClick={() => setModalOpen(false)} disabled={saveLoading}>Cancel</Button>
+            <Button onClick={handleSave} loading={saveLoading}>{editing ? 'Save Changes' : 'Create Institution'}</Button>
           </div>
         </div>
       </Modal>
     </div>
   );
 }
+

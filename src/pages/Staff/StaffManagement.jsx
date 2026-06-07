@@ -4,6 +4,11 @@ import { useAuth } from '../../context/AuthContext';
 import { db, logAuditAction } from '../../services';
 import { PageHeader, Card, Button, Input, Select, Badge, Modal, EmptyState } from '../../components/ui/ui-components';
 import { Users, Plus, Pencil } from 'lucide-react';
+import { firebaseConfig, firestore } from '../../config/firebase';
+import { initializeApp } from 'firebase/app';
+import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { doc, setDoc, updateDoc } from 'firebase/firestore';
+import { toast } from 'react-hot-toast';
 
 const ROLES = [
   { value: 'owner', label: 'Owner' },
@@ -29,21 +34,81 @@ export default function StaffManagement() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [search, setSearch] = useState('');
+  const [saveLoading, setSaveLoading] = useState(false);
 
-  const openAdd = () => { setEditing(null); setForm(emptyForm); setModalOpen(true); };
-  const openEdit = (member) => { setEditing(member); setForm({ name: member.name, email: member.email, role: member.role, status: member.status, phoneNumber: member.phoneNumber || '', password: '' }); setModalOpen(true); };
+  const openAdd = () => { setEditing(null); setForm(emptyForm); setSaveLoading(false); setModalOpen(true); };
+  const openEdit = (member) => { setEditing(member); setForm({ name: member.name, email: member.email, role: member.role, status: member.status, phoneNumber: member.phoneNumber || '', password: '' }); setSaveLoading(false); setModalOpen(true); };
 
-  const handleSave = () => {
-    if (!form.name || !form.email) return;
-    if (editing) {
-      const { email, password, ...editableForm } = form;
-      db.updateStaff(editing.id, editableForm);
-      logAuditAction(user.id, user.email, user.role, 'update_staff', 'staff', editing.id, `Updated ${form.name}`);
-    } else {
-      const created = db.addStaff(form);
-      logAuditAction(user.id, user.email, user.role, 'create_staff', 'staff', created.id, `Created ${form.name}`);
+  const handleSave = async () => {
+    if (!form.name || !form.email) {
+      toast.error('Name and email are required.');
+      return;
     }
-    setModalOpen(false);
+
+    setSaveLoading(true);
+    try {
+      if (editing) {
+        await updateDoc(doc(firestore, 'staff', editing.id), {
+          name: form.name,
+          role: form.role,
+          status: form.status,
+          phoneNumber: form.phoneNumber || '',
+        });
+        await updateDoc(doc(firestore, 'users', editing.id), {
+          name: form.name,
+          role: form.role,
+          status: form.status,
+          phoneNumber: form.phoneNumber || '',
+        });
+        logAuditAction(user.id, user.email, user.role, 'update_staff', 'staff', editing.id, `Updated ${form.name}`);
+        toast.success('Staff member updated successfully.');
+        setModalOpen(false);
+      } else {
+        if (!form.password) {
+          toast.error('Temporary password is required.');
+          setSaveLoading(false);
+          return;
+        }
+
+        const secondaryApp = initializeApp(firebaseConfig, 'SecondaryStaff');
+        const secondaryAuth = getAuth(secondaryApp);
+        let uid;
+        try {
+          const userCredential = await createUserWithEmailAndPassword(secondaryAuth, form.email, form.password);
+          uid = userCredential.user.uid;
+          await signOut(secondaryAuth);
+        } finally {
+          await secondaryApp.delete();
+        }
+
+        await setDoc(doc(firestore, 'users', uid), {
+          name: form.name,
+          email: form.email,
+          role: form.role,
+          status: form.status,
+          phoneNumber: form.phoneNumber || '',
+          createdAt: new Date().toISOString().slice(0, 10),
+        });
+
+        await setDoc(doc(firestore, 'staff', uid), {
+          name: form.name,
+          email: form.email,
+          role: form.role,
+          status: form.status,
+          phoneNumber: form.phoneNumber || '',
+          createdAt: new Date().toISOString().slice(0, 10),
+        });
+
+        logAuditAction(user.id, user.email, user.role, 'create_staff', 'staff', uid, `Created ${form.name}`);
+        toast.success('Staff member created successfully.');
+        setModalOpen(false);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(err.message || 'Failed to save staff member.');
+    } finally {
+      setSaveLoading(false);
+    }
   };
 
   const filtered = staff.filter((m) =>
@@ -97,22 +162,23 @@ export default function StaffManagement() {
         </Card>
       )}
 
-      <Modal open={modalOpen} title={editing ? 'Edit Staff' : 'Add Staff'} onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen} title={editing ? 'Edit Staff' : 'Add Staff'} onClose={() => !saveLoading && setModalOpen(false)}>
         <div className="flex flex-col gap-4">
-          <Input label="Full Name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Ravi Kumar" />
-          <Input label="Email" required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@gangamaxx.com" disabled={!!editing} />
+          <Input label="Full Name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Ravi Kumar" disabled={saveLoading} />
+          <Input label="Email" required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@gangamaxx.com" disabled={saveLoading || !!editing} />
           {!editing && (
-            <Input label="Temporary Password" required type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Enter temporary password" />
+            <Input label="Temporary Password" required type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Enter temporary password" disabled={saveLoading} />
           )}
-          <Input label="Phone Number" value={form.phoneNumber} onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })} placeholder="+91 98765 43210" />
-          <Select label="Role" required value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} options={ROLES} />
-          <Select label="Status" required value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} options={STATUSES} />
+          <Input label="Phone Number" value={form.phoneNumber} onChange={(e) => setForm({ ...form, phoneNumber: e.target.value })} placeholder="+91 98765 43210" disabled={saveLoading} />
+          <Select label="Role" required value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} options={ROLES} disabled={saveLoading} />
+          <Select label="Status" required value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} options={STATUSES} disabled={saveLoading} />
           <div className="flex justify-end gap-3 pt-2">
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave}>{editing ? 'Save Changes' : 'Create Staff'}</Button>
+            <Button variant="secondary" onClick={() => setModalOpen(false)} disabled={saveLoading}>Cancel</Button>
+            <Button onClick={handleSave} loading={saveLoading}>{editing ? 'Save Changes' : 'Create Staff'}</Button>
           </div>
         </div>
       </Modal>
     </div>
   );
 }
+
