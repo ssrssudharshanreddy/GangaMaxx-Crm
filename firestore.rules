@@ -141,6 +141,11 @@ service cloud.firestore {
     }
 
     // 5. OTHER COLLECTIONS (Audit Logs, Products, Tickets, Settings, Counters)
+    match /staff/{memberId} {
+      allow read: if isAuthenticated();
+      allow write: if hasRole('owner') || hasRole('salesAdmin');
+    }
+
     match /products/{productId} {
       allow read: if isAuthenticated();
       allow write: if hasRole('owner') || hasRole('salesAdmin') || hasRole('warehouseStaff');
