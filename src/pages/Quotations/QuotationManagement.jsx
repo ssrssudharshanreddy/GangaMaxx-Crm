@@ -65,12 +65,6 @@ export default function QuotationManagement() {
     setModalOpen(false);
   };
 
-  const convertToOrder = (q) => {
-    db.addOrder({ institutionName: q.institutionName, items: q.items, total: q.total, paymentMode: 'credit', status: 'pending', notes: `Converted from quote ${q.quotationNumber}`, createdBy: user?.name || '' });
-    db.updateQuotation(q.id, { status: 'accepted' });
-    setDetailModal(null);
-  };
-
   const handleConvertToOrder = async (quotation) => {
     if (!quotation?.items?.length) {
       toast.error('Quotation has no items to convert.');
@@ -212,7 +206,7 @@ export default function QuotationManagement() {
             )}
             <div className="text-right text-lg font-bold text-[var(--text-primary)]">Total: {currency.format(detailModal.total || 0)}</div>
             {detailModal.status === 'sent' && (
-              <Button icon={Copy} onClick={() => convertToOrder(detailModal)}>Convert to Order</Button>
+              <Button icon={Copy} onClick={() => handleConvertToOrder(detailModal)}>Convert to Order</Button>
             )}
             {detailModal?.status === 'accepted' && (
               <Button
