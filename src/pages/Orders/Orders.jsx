@@ -3,7 +3,28 @@ import { useCollection } from '../../hooks/useDb';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services';
 import { PageHeader, Card, Button, Input, Select, Badge, Modal, EmptyState, Textarea } from '../../components/ui/ui-components';
-import { ShoppingCart, Plus, Pencil, Eye } from 'lucide-react';
+import { ShoppingCart, Plus, Pencil, Eye, Download } from 'lucide-react';
+
+const exportToCSV = (data, filename) => {
+  const headers = ['Order #', 'Institution', 'Date', 'Items', 'Total (INR)', 'Payment Mode', 'Status'];
+  const rows = data.map(o => [
+    o.orderNumber || o.id,
+    o.institutionName || '',
+    o.createdAt || '',
+    (o.items || []).map(i => `${i.productName}x${i.quantity}`).join('; '),
+    (o.items || []).reduce((s, i) => s + (i.quantity * i.unitPrice), 0),
+    o.paymentMode || '',
+    o.status || ''
+  ]);
+  const csvContent = [headers, ...rows]
+    .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+};
 
 const ORDER_STATUSES = [
   { value: 'pending', label: 'Pending' },
@@ -24,7 +45,13 @@ const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: '
 
 export default function Orders() {
   const { user } = useAuth();
-  const orders = useCollection('orders');
+  const orders = useCollection('orders', useMemo(() => {
+    if (!user) return (data) => data;
+    if (user.role === 'salesman') {
+      return (data) => data.filter(o => o.salesmanId === user.id || o.salesmanEmail === user.email);
+    }
+    return (data) => data;
+  }, [user]));
   const institutions = useCollection('institutions');
   const products = useCollection('products');
   const invoices = useCollection('invoices');
@@ -36,6 +63,10 @@ export default function Orders() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [creditError, setCreditError] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 20;
+
+  useEffect(() => setCurrentPage(1), [search, statusFilter]);
 
   const emptyForm = { institutionName: '', items: [{ productName: '', quantity: 1, unitPrice: 0 }], paymentMode: 'credit', status: 'pending', notes: '' };
   const [form, setForm] = useState(emptyForm);
@@ -105,7 +136,32 @@ export default function Orders() {
     }
     const total = form.items.reduce((s, i) => s + (i.quantity * i.unitPrice), 0);
     if (editing) {
-      db.updateOrder(editing.id, { ...form, total });
+      if (editing.status !== form.status) {
+        // Log audit
+        db.logAuditAction(
+          user.id, user.email, user.role,
+          'ORDER_STATUS_CHANGED',
+          'order',
+          editing.id,
+          { from: editing.status, to: form.status, orderNumber: editing.orderNumber }
+        );
+
+        // Push notification to customer
+        if (editing.institutionId) {
+          const institution = institutions.find(i => i.id === editing.institutionId || i.name === editing.institutionName);
+          if (institution?.contactPerson?.uid) {
+            db.addNotification({
+              recipientId: institution.contactPerson.uid,
+              type: 'order_status',
+              title: `Order ${editing.orderNumber || editing.id} updated`,
+              body: `Your order status changed from ${editing.status} to ${form.status}.`,
+              orderId: editing.id,
+              read: false,
+            });
+          }
+        }
+      }
+      db.updateOrder(editing.id, { ...form, total, _changedBy: user?.email || user?.id });
     } else {
       db.addOrder({ ...form, total, createdBy: user?.name || user?.email || '' });
     }
@@ -117,9 +173,31 @@ export default function Orders() {
     return matchSearch && matchStatus;
   });
 
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, currentPage]);
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Order Management" subtitle="Create and manage B2B purchase orders." actions={<Button icon={Plus} onClick={openAdd}>New Order</Button>} />
+      <PageHeader
+        title="Order Management"
+        subtitle="Create and manage B2B purchase orders."
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={Download}
+              onClick={() => exportToCSV(filtered, `orders-${new Date().toISOString().slice(0,10)}.csv`)}
+            >
+              Export CSV
+            </Button>
+            <Button icon={Plus} onClick={openAdd}>New Order</Button>
+          </div>
+        }
+      />
 
       <div className="flex flex-wrap gap-3">
         <Input placeholder="Search by order # or institution…" value={search} onChange={(e) => setSearch(e.target.value)} className="flex-1 min-w-[200px]" />
@@ -145,7 +223,7 @@ export default function Orders() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((o) => (
+                {paginatedOrders.map((o) => (
                   <tr key={o.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-secondary)] transition-colors">
                     <td className="px-5 py-3 font-mono text-xs font-medium text-[var(--text-primary)]">{o.orderNumber || o.id}</td>
                     <td className="px-5 py-3 text-[var(--text-primary)]">{o.institutionName}</td>
@@ -164,6 +242,31 @@ export default function Orders() {
             </table>
           </div>
         </Card>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-4 border-t border-[var(--border)]">
+          <p className="text-sm text-[var(--text-secondary)]">
+            Showing {((currentPage-1)*PAGE_SIZE)+1}–{Math.min(currentPage*PAGE_SIZE, filtered.length)} of {filtered.length} orders
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p-1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 text-sm rounded-lg border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-[var(--text-secondary)]">{currentPage} / {totalPages}</span>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p+1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1.5 text-sm rounded-lg border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Order Detail Modal */}

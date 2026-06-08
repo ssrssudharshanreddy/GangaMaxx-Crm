@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, onSnapshot, updateDoc, runTransaction, setDoc, getDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, onSnapshot, updateDoc, runTransaction, setDoc, getDoc, query, limit, orderBy, arrayUnion } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, firestore } from '../config/firebase';
 import { DBNotifier } from './dbNotifier';
@@ -61,12 +61,22 @@ export class FirestoreDatabaseService {
   }
 
   initListeners() {
+    const getQuery = (key, collectionName) => {
+      const col = collection(firestore, collectionName);
+      if (key === 'orders') return query(col, orderBy('createdAt', 'desc'), limit(200));
+      if (key === 'notifications') return query(col, limit(100));
+      if (key === 'audits') return query(col, orderBy('timestamp', 'desc'), limit(500));
+      if (key === 'payments') return query(col, orderBy('createdAt', 'desc'), limit(200));
+      if (key === 'invoices') return query(col, orderBy('createdAt', 'desc'), limit(200));
+      return col;
+    };
+
     this.collectionConfigs.forEach(({ key, names }) => {
       const snapshotsByName = new Map();
 
       names.forEach((collectionName) => {
         const unsubscribe = onSnapshot(
-          collection(firestore, collectionName),
+          getQuery(key, collectionName),
           (snapshot) => {
             snapshotsByName.set(
               collectionName,
@@ -191,7 +201,16 @@ export class FirestoreDatabaseService {
   }
 
   async updateOrder(id, updates) {
-    await updateDoc(doc(firestore, 'orders', id), updates);
+    const baseUpdate = { ...updates };
+    if (updates.status) {
+      baseUpdate.statusHistory = arrayUnion({
+        status: updates.status,
+        changedAt: new Date().toISOString(),
+        changedBy: updates._changedBy || 'system',
+      });
+      delete baseUpdate._changedBy;
+    }
+    await updateDoc(doc(firestore, 'orders', id), baseUpdate);
   }
 
   async addQuotation(quote) {

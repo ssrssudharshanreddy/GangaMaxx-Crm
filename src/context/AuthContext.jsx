@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import {
   browserLocalPersistence,
   onAuthStateChanged,
@@ -48,6 +48,29 @@ export const AuthProvider = ({ children }) => {
   });
   const [loading, setLoading] = useState(true);
 
+  const logout = useCallback(async () => {
+    setUser(null);
+    localStorage.removeItem('gm_crm_active_session');
+    if (auth) {
+      try {
+        await signOut(auth);
+      } catch (error) {
+        void 0;
+      }
+    }
+  }, []);
+
+  const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+  const idleTimerRef = useRef(null);
+
+  const resetIdleTimer = useCallback(() => {
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = setTimeout(() => {
+      logout();
+      localStorage.setItem('gm_session_expired', '1');
+    }, IDLE_TIMEOUT_MS);
+  }, [logout]);
+
   useEffect(() => {
     if (!auth || !firestore) {
       setLoading(false);
@@ -80,6 +103,17 @@ export const AuthProvider = ({ children }) => {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+    const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click'];
+    events.forEach(e => window.addEventListener(e, resetIdleTimer, { passive: true }));
+    resetIdleTimer();
+    return () => {
+      events.forEach(e => window.removeEventListener(e, resetIdleTimer));
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
+  }, [user, resetIdleTimer]);
+
   const loginWithEmail = async (email, password) => {
     setLoading(true);
     if (!auth) {
@@ -101,18 +135,6 @@ export const AuthProvider = ({ children }) => {
       throw error;
     } finally {
       setLoading(false);
-    }
-  };
-
-  const logout = async () => {
-    setUser(null);
-    localStorage.removeItem('gm_crm_active_session');
-    if (auth) {
-      try {
-        await signOut(auth);
-      } catch (error) {
-        void 0;
-      }
     }
   };
 

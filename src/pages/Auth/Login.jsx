@@ -15,6 +15,13 @@ export default function Login() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    if (localStorage.getItem('gm_session_expired') === '1') {
+      setInfo('Your session expired due to inactivity. Please sign in again.');
+      localStorage.removeItem('gm_session_expired');
+    }
+  }, []);
+
+  useEffect(() => {
     let interval;
     if (lockoutRemaining > 0) {
       interval = setInterval(() => {

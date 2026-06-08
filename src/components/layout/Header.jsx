@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useState, useMemo, useRef, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { useNotifications } from '../../hooks/useDb';
-import { Menu, Bell, X } from 'lucide-react';
+import { useNotifications, useCollection } from '../../hooks/useDb';
+import { Menu, Bell, X, Search } from 'lucide-react';
 import { ThemeToggle } from '../ui/ThemeToggle';
 
 const pageTitles = {
@@ -26,6 +26,92 @@ const pageTitles = {
   '/reports': 'Reports',
 };
 
+const GlobalSearch = () => {
+  const [queryVal, setQueryVal] = useState('');
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef(null);
+  const navigate = useNavigate();
+  
+  const orders = useCollection('orders');
+  const institutions = useCollection('institutions');
+  const invoices = useCollection('invoices');
+  
+  const results = useMemo(() => {
+    if (!queryVal.trim() || queryVal.length < 2) return [];
+    const q = queryVal.toLowerCase();
+    const orderResults = orders
+      .filter(o => (o.orderNumber||'').toLowerCase().includes(q) || (o.institutionName||'').toLowerCase().includes(q))
+      .slice(0, 3)
+      .map(o => ({ type: 'Order', label: o.orderNumber || o.id, sub: o.institutionName, path: '/orders' }));
+    const instResults = institutions
+      .filter(i => (i.name||'').toLowerCase().includes(q) || (i.contactEmail||'').toLowerCase().includes(q))
+      .slice(0, 3)
+      .map(i => ({ type: 'Institution', label: i.name, sub: i.type || i.category, path: '/institutions' }));
+    const invResults = invoices
+      .filter(i => (i.invoiceNumber||'').toLowerCase().includes(q) || (i.institutionName||'').toLowerCase().includes(q))
+      .slice(0, 3)
+      .map(i => ({ type: 'Invoice', label: i.invoiceNumber || i.id, sub: i.institutionName, path: '/invoices' }));
+    return [...orderResults, ...instResults, ...invResults];
+  }, [queryVal, orders, institutions, invoices]);
+  
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setOpen(true);
+        setTimeout(() => inputRef.current?.focus(), 50);
+      }
+      if (e.key === 'Escape') { setOpen(false); setQueryVal(''); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+  
+  return (
+    <div className="relative hidden md:block">
+      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-secondary)] text-[var(--text-tertiary)] text-sm cursor-pointer hover:border-[var(--border-strong)] w-56"
+        onClick={() => { setOpen(true); setTimeout(() => inputRef.current?.focus(), 50); }}>
+        <Search className="h-3.5 w-3.5 flex-shrink-0" />
+        <span className="flex-1 text-left">Search...</span>
+        <kbd className="text-xs bg-[var(--bg-tertiary)] px-1.5 py-0.5 rounded border border-[var(--border)] font-mono">⌘K</kbd>
+      </div>
+      {open && (
+        <div className="absolute top-0 left-0 z-50 w-80">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-t-lg border border-[var(--border)] bg-[var(--bg-base)]">
+            <Search className="h-3.5 w-3.5 text-[var(--text-tertiary)] flex-shrink-0" />
+            <input ref={inputRef} autoFocus value={queryVal} onChange={e => setQueryVal(e.target.value)}
+              placeholder="Search orders, institutions, invoices..."
+              className="flex-1 bg-transparent text-sm text-[var(--text-primary)] outline-none placeholder:text-[var(--text-tertiary)]" />
+            <button onClick={() => { setOpen(false); setQueryVal(''); }}>
+              <X className="h-3.5 w-3.5 text-[var(--text-tertiary)]" />
+            </button>
+          </div>
+          {results.length > 0 && (
+            <div className="border-x border-b border-[var(--border)] rounded-b-lg bg-[var(--bg-base)] shadow-lg overflow-hidden max-h-80 overflow-y-auto">
+              {results.map((r, i) => (
+                <button key={i} onClick={() => { navigate(r.path); setOpen(false); setQueryVal(''); }}
+                  className="w-full text-left px-3 py-2.5 hover:bg-[var(--bg-secondary)] flex items-center gap-3 border-b border-[var(--border)] last:border-0">
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--brand-light)] text-[var(--brand-text)] font-medium">{r.type}</span>
+                  <div>
+                    <p className="text-sm font-medium text-[var(--text-primary)]">{r.label}</p>
+                    {r.sub && <p className="text-xs text-[var(--text-secondary)]">{r.sub}</p>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          {queryVal.length >= 2 && results.length === 0 && (
+            <div className="border-x border-b border-[var(--border)] rounded-b-lg bg-[var(--bg-base)] px-3 py-4 text-center text-sm text-[var(--text-secondary)]">
+              No results for "{queryVal}"
+            </div>
+          )}
+        </div>
+      )}
+      {open && <div className="fixed inset-0 z-40" onClick={() => { setOpen(false); setQueryVal(''); }} />}
+    </div>
+  );
+};
+
 export const Header = ({ setMobileOpen }) => {
   const { user } = useAuth();
   const location = useLocation();
@@ -47,6 +133,7 @@ export const Header = ({ setMobileOpen }) => {
         </div>
       </div>
       <div className="flex items-center gap-3">
+        <GlobalSearch />
         <ThemeToggle />
         <div className="relative">
           <button type="button" onClick={() => setMenuOpen((c) => !c)} className="rounded-2xl border border-[var(--border)] p-2">

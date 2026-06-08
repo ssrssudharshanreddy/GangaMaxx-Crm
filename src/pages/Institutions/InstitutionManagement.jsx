@@ -1,14 +1,36 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useCollection } from '../../hooks/useDb';
 import { useAuth } from '../../context/AuthContext';
 import { db, logAuditAction } from '../../services';
 import { PageHeader, Card, Button, Input, Select, Badge, Modal, EmptyState, Textarea } from '../../components/ui/ui-components';
-import { Building2, Plus, Pencil } from 'lucide-react';
+import { Building2, Plus, Pencil, Download } from 'lucide-react';
 import { firebaseConfig, firestore } from '../../config/firebase';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, setDoc, updateDoc, collection, addDoc } from 'firebase/firestore';
 import { toast } from 'react-hot-toast';
+
+const exportToCSV = (data, filename) => {
+  const headers = ['Institution', 'Type', 'GSTIN / Tax ID', 'Contact Person', 'Email', 'Phone', 'Credit Limit', 'Status'];
+  const rows = data.map(inst => [
+    inst.name || '',
+    inst.type || '',
+    inst.taxId || '',
+    inst.contactPerson?.name || '',
+    inst.contactPerson?.email || '',
+    inst.contactPerson?.phone || '',
+    inst.creditLimit || 0,
+    inst.status || ''
+  ]);
+  const csvContent = [headers, ...rows]
+    .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+};
 
 const TYPES = [
   { value: 'hotel', label: 'Hotel' },
@@ -54,6 +76,10 @@ export default function InstitutionManagement() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [saveLoading, setSaveLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 25;
+
+  useEffect(() => setCurrentPage(1), [search, statusFilter]);
 
   const openAdd = () => { setEditing(null); setForm(emptyForm); setSaveLoading(false); setModalOpen(true); };
   const openEdit = (inst) => {
@@ -196,12 +222,30 @@ export default function InstitutionManagement() {
     return matchSearch && matchStatus;
   });
 
+  const paginatedInstitutions = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, currentPage]);
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Institution Management"
         subtitle="Manage B2B institutions, onboarding, and credit accounts."
-        actions={<Button icon={Plus} onClick={openAdd}>Add Institution</Button>}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={Download}
+              onClick={() => exportToCSV(filtered, `institutions-${new Date().toISOString().slice(0,10)}.csv`)}
+            >
+              Export CSV
+            </Button>
+            <Button icon={Plus} onClick={openAdd}>Add Institution</Button>
+          </div>
+        }
       />
 
       <div className="flex flex-wrap gap-3">
@@ -227,7 +271,7 @@ export default function InstitutionManagement() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((inst) => (
+                {paginatedInstitutions.map((inst) => (
                   <tr key={inst.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-secondary)] transition-colors">
                     <td className="px-5 py-3 font-medium text-[var(--text-primary)]">{inst.name}</td>
                     <td className="px-5 py-3 text-[var(--text-secondary)] capitalize">{inst.type?.replace(/_/g, ' ')}</td>
@@ -244,6 +288,31 @@ export default function InstitutionManagement() {
             </table>
           </div>
         </Card>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-4 border-t border-[var(--border)]">
+          <p className="text-sm text-[var(--text-secondary)]">
+            Showing {((currentPage-1)*PAGE_SIZE)+1}–{Math.min(currentPage*PAGE_SIZE, filtered.length)} of {filtered.length} institutions
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p-1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 text-sm rounded-lg border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-[var(--text-secondary)]">{currentPage} / {totalPages}</span>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p+1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1.5 text-sm rounded-lg border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       )}
 
       <Modal open={modalOpen} title={editing ? 'Edit Institution' : 'Add Institution'} onClose={() => !saveLoading && setModalOpen(false)}>

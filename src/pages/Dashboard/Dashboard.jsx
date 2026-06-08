@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 import { useCollection } from '../../hooks/useDb';
 import { Card, Badge } from '../../components/ui/ui-components';
+import { useAuth } from '../../context/AuthContext';
 
 const currency = new Intl.NumberFormat('en-IN', {
   style: 'currency',
@@ -23,6 +24,7 @@ const statusColor = {
 const getAmount = (item) => Number(item.total ?? item.amount ?? item.creditUsed ?? 0);
 
 export default function DashboardPage() {
+  const { user } = useAuth();
   const staff = useCollection('staff');
   const institutions = useCollection('institutions');
   const products = useCollection('products');
@@ -33,6 +35,31 @@ export default function DashboardPage() {
   const quotations = useCollection('quotations');
   const visitLogs = useCollection('visitLogs');
   const followUps = useCollection('followUps');
+
+  const myOrders = useMemo(() => {
+    if (user?.role !== 'salesman') return [];
+    return orders.filter(o => o.salesmanId === user.id || o.salesmanEmail === user.email);
+  }, [orders, user]);
+
+  const myInstitutions = useMemo(() => {
+    if (user?.role !== 'salesman') return [];
+    return institutions.filter(i => i.assignedSalesmanId === user.id || i.assignedSalesmanEmail === user.email);
+  }, [institutions, user]);
+
+  const myFollowUps = useMemo(() => {
+    if (user?.role !== 'salesman') return [];
+    return followUps.filter(f => f.assignedTo === user.id || f.assignedEmail === user.email);
+  }, [followUps, user]);
+
+  const pendingMyFollowUps = myFollowUps.filter(f => f.status === 'pending').length;
+  const myOrderValue = myOrders.reduce((s, o) => s + Number(o.total || 0), 0);
+  const myVisitsThisMonth = useMemo(() => {
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    return visitLogs.filter(v =>
+      (v.salesmanId === user?.id || v.salesmanEmail === user?.email) &&
+      (v.createdAt || '').startsWith(thisMonth)
+    ).length;
+  }, [visitLogs, user]);
 
   const openInvoices = useMemo(
     () => invoices.filter((invoice) => ['unpaid', 'overdue'].includes(invoice.status)),
@@ -82,6 +109,52 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-extrabold text-[var(--text-primary)]">Dashboard</h1>
         <p className="text-sm text-[var(--text-secondary)]">Live operational view across customers, sales, billing, and support.</p>
       </div>
+
+      {user?.role === 'salesman' && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="space-y-1 border-l-4 border-l-[var(--brand)]">
+            <div className="text-xs uppercase tracking-widest text-[var(--text-tertiary)]">My Orders</div>
+            <div className="text-2xl font-bold text-[var(--text-primary)]">{myOrders.length}</div>
+            <div className="text-xs text-[var(--text-secondary)]">{currency.format(myOrderValue)} total value</div>
+          </Card>
+          <Card className="space-y-1 border-l-4 border-l-emerald-500">
+            <div className="text-xs uppercase tracking-widest text-[var(--text-tertiary)]">My Accounts</div>
+            <div className="text-2xl font-bold text-[var(--text-primary)]">{myInstitutions.length}</div>
+            <div className="text-xs text-[var(--text-secondary)]">assigned institutions</div>
+          </Card>
+          <Card className={`space-y-1 border-l-4 ${pendingMyFollowUps > 0 ? 'border-l-amber-500' : 'border-l-[var(--border)]'}`}>
+            <div className="text-xs uppercase tracking-widest text-[var(--text-tertiary)]">Pending Follow-Ups</div>
+            <div className={`text-2xl font-bold ${pendingMyFollowUps > 0 ? 'text-amber-600' : 'text-[var(--text-primary)]'}`}>{pendingMyFollowUps}</div>
+            <div className="text-xs text-[var(--text-secondary)]">need attention</div>
+          </Card>
+          <Card className="space-y-1 border-l-4 border-l-violet-500">
+            <div className="text-xs uppercase tracking-widest text-[var(--text-tertiary)]">Visits This Month</div>
+            <div className="text-2xl font-bold text-[var(--text-primary)]">{myVisitsThisMonth}</div>
+            <div className="text-xs text-[var(--text-secondary)]">field visits logged</div>
+          </Card>
+        </div>
+      )}
+
+      {user?.role === 'accounts_manager' && (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Card className="space-y-1 border-l-4 border-l-rose-500">
+            <div className="text-xs uppercase tracking-widest text-rose-600">Outstanding</div>
+            <div className="text-2xl font-bold text-rose-600">
+              {currency.format(invoices.filter(i => ['unpaid','overdue'].includes(i.status)).reduce((s,i) => s + Number(i.total||i.amount||0), 0))}
+            </div>
+          </Card>
+          <Card className="space-y-1 border-l-4 border-l-amber-500">
+            <div className="text-xs uppercase tracking-widest text-amber-600">Overdue Invoices</div>
+            <div className="text-2xl font-bold text-amber-600">{invoices.filter(i => i.status === 'overdue').length}</div>
+          </Card>
+          <Card className="space-y-1 border-l-4 border-l-emerald-500">
+            <div className="text-xs uppercase tracking-widest text-emerald-600">Collected This Month</div>
+            <div className="text-2xl font-bold text-emerald-600">
+              {currency.format(payments.filter(p => (p.createdAt||'').startsWith(new Date().toISOString().slice(0,7))).reduce((s,p) => s + Number(p.amount||0), 0))}
+            </div>
+          </Card>
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="space-y-2">

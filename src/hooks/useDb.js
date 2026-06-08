@@ -42,12 +42,13 @@ const getCollectionData = (collectionName) => {
   }
 };
 
-export function useCollection(collectionName) {
-  return useSyncExternalStore(
+export function useCollection(collectionName, queryFilter) {
+  const data = useSyncExternalStore(
     subscribeToDb,
     () => getCollectionData(collectionName),
     () => getCollectionData(collectionName)
   );
+  return useMemo(() => (queryFilter ? queryFilter(data) : data), [data, queryFilter]);
 }
 
 export function useNotifications(userId) {

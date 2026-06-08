@@ -125,17 +125,17 @@ html.dark {
   --info:            #38bdf8;
   --danger-light:    #7f1d1d;
   --danger-text:     #fecaca;
-  --info:            #38bdf8;
   --info-light:      #0e7490;
   --info-text:       #bae6fd;
 
+  --brand-dark:      #1d4ed8;
   --sidebar-bg:      #0f172a;
-  --sidebar-border:  #334155;
-  --sidebar-text:    #cbd5e1;
-  --sidebar-text-active: #f8fafc;
+  --sidebar-border:  #1e293b;
+  --sidebar-text:    #94a3b8;
+  --sidebar-text-active: #f1f5f9;
   --sidebar-item-active: #1e293b;
-  --sidebar-item-hover:  #111827;
-  --bg-panel:         #111827;
+  --sidebar-item-hover: #1e293b;
+  --bg-panel:         #020617;
   --danger-dark:      #991b1b;
   --success-dark:     #15803d;
 }
