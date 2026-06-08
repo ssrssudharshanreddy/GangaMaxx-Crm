@@ -17,6 +17,7 @@ import {
   Box,
   CheckCircle,
   FileCheck2,
+  ShoppingCart,
 } from 'lucide-react';
 
 const navSections = [
@@ -34,6 +35,7 @@ const navSections = [
       { name: 'Follow Ups', path: '/follow-ups', icon: CalendarDays, roles: ['owner', 'sales_admin', 'salesman'] },
       { name: 'Visit Logs', path: '/visit-logs', icon: MapPin, roles: ['owner', 'sales_admin', 'salesman'] },
       { name: 'Quotations', path: '/quotations', icon: FileText, roles: ['owner', 'sales_admin', 'salesman'] },
+      { name: 'Orders', path: '/orders', icon: ShoppingCart, roles: ['owner', 'sales_admin', 'salesman', 'warehouse_staff', 'accounts_manager', 'support_staff'] },
     ],
   },
   {
