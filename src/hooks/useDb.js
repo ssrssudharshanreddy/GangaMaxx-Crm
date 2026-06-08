@@ -35,6 +35,8 @@ const getCollectionData = (collectionName) => {
       return db.getReturns();
     case 'audits':
       return db.getAudits();
+    case 'creditAccounts':
+      return db.getCreditAccounts();
     default:
       return EMPTY_ARRAY;
   }

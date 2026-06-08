@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, onSnapshot, updateDoc, runTransaction, setDoc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, firestore } from '../config/firebase';
 import { DBNotifier } from './dbNotifier';
@@ -24,6 +24,7 @@ export class FirestoreDatabaseService {
       { key: 'followUps', names: ['followUps', 'follow_ups'] },
       { key: 'returns', names: ['returns'] },
       { key: 'audits', names: ['audits'] },
+      { key: 'creditAccounts', names: ['creditAccounts', 'credit_accounts'] },
     ];
 
     this.collectionConfigs.forEach(({ key }) => {
@@ -45,6 +46,20 @@ export class FirestoreDatabaseService {
     });
   }
 
+  async getNextCounterValue(counterName) {
+    const counterDocRef = doc(firestore, 'counters', counterName);
+    return await runTransaction(firestore, async (transaction) => {
+      const counterSnap = await transaction.get(counterDocRef);
+      let currentVal = 0;
+      if (counterSnap.exists()) {
+        currentVal = counterSnap.data().value || 0;
+      }
+      const newVal = currentVal + 1;
+      transaction.set(counterDocRef, { value: newVal });
+      return newVal;
+    });
+  }
+
   initListeners() {
     this.collectionConfigs.forEach(({ key, names }) => {
       const snapshotsByName = new Map();
@@ -55,11 +70,13 @@ export class FirestoreDatabaseService {
           (snapshot) => {
             snapshotsByName.set(
               collectionName,
-              snapshot.docs.map((docSnap) => ({
-                id: docSnap.id,
-                sourceCollection: collectionName,
-                ...docSnap.data(),
-              }))
+              snapshot.docs
+                .map((docSnap) => ({
+                  id: docSnap.id,
+                  sourceCollection: collectionName,
+                  ...docSnap.data(),
+                }))
+                .filter((item) => item.deletedAt === undefined || item.deletedAt === null)
             );
             this.errors[key] = null;
             this.cache[key] = Array.from(snapshotsByName.values()).flat();
@@ -110,6 +127,7 @@ export class FirestoreDatabaseService {
   getFollowUps() { return this.cache.followUps || []; }
   getReturns() { return this.cache.returns || []; }
   getAudits() { return this.cache.audits || []; }
+  getCreditAccounts() { return this.cache.creditAccounts || []; }
 
   async addStaff(staff) {
     const docRef = await addDoc(collection(firestore, 'staff'), {
@@ -160,11 +178,16 @@ export class FirestoreDatabaseService {
   }
 
   async addOrder(order) {
-    const docRef = await addDoc(collection(firestore, 'orders'), {
+    const nextVal = await this.getNextCounterValue('orders');
+    const orderNumber = `ORD-${new Date().getFullYear()}-${String(nextVal).padStart(5, '0')}`;
+    const orderData = {
       ...order,
+      orderNumber,
+      deletedAt: null,
       createdAt: new Date().toISOString().slice(0, 10),
-    });
-    return { id: docRef.id, ...order };
+    };
+    await setDoc(doc(firestore, 'orders', orderNumber), orderData);
+    return { id: orderNumber, ...orderData };
   }
 
   async updateOrder(id, updates) {
@@ -172,11 +195,16 @@ export class FirestoreDatabaseService {
   }
 
   async addQuotation(quote) {
-    const docRef = await addDoc(collection(firestore, 'quotations'), {
+    const nextVal = await this.getNextCounterValue('quotations');
+    const quoteNumber = `QT-${new Date().getFullYear()}-${String(nextVal).padStart(5, '0')}`;
+    const quoteData = {
       ...quote,
+      quoteNumber,
+      deletedAt: null,
       createdAt: new Date().toISOString().slice(0, 10),
-    });
-    return { id: docRef.id, ...quote };
+    };
+    await setDoc(doc(firestore, 'quotations', quoteNumber), quoteData);
+    return { id: quoteNumber, ...quoteData };
   }
 
   async updateQuotation(id, updates) {
@@ -184,15 +212,26 @@ export class FirestoreDatabaseService {
   }
 
   async addInvoice(invoice) {
-    const docRef = await addDoc(collection(firestore, 'invoices'), {
+    const nextVal = await this.getNextCounterValue('invoices');
+    const invoiceNumber = `INV-${new Date().getFullYear()}-${String(nextVal).padStart(5, '0')}`;
+    const invoiceData = {
       ...invoice,
+      invoiceNumber,
+      deletedAt: null,
       createdAt: new Date().toISOString().slice(0, 10),
-    });
-    return { id: docRef.id, ...invoice };
+    };
+    await setDoc(doc(firestore, 'invoices', invoiceNumber), invoiceData);
+    return { id: invoiceNumber, ...invoiceData };
   }
 
   async updateInvoice(id, updates) {
     await updateDoc(doc(firestore, 'invoices', id), updates);
+  }
+
+  async softDeleteDoc(collectionName, id) {
+    await updateDoc(doc(firestore, collectionName, id), {
+      deletedAt: new Date().toISOString()
+    });
   }
 
   async addPayment(payment) {

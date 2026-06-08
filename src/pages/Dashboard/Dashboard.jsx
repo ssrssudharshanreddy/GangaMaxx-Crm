@@ -113,7 +113,7 @@ export default function DashboardPage() {
             <p className="text-sm text-[var(--text-secondary)]">Counts from Firestore-backed service collections.</p>
           </div>
           <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <BarChart data={pipeline}>
                 <XAxis dataKey="name" tickLine={false} axisLine={false} />
                 <YAxis allowDecimals={false} tickLine={false} axisLine={false} />

@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helpers
+    // Helper functions
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -15,266 +15,227 @@ service cloud.firestore {
       return isAuthenticated() && getUserData().status == 'active';
     }
     
-    function hasRole(role) {
-      return isActive() && getUserData().role == role;
+    function getRole() {
+      return getUserData().role;
     }
-    
-    function isStaff() {
-      return isActive() && getUserData().role in [
-        'owner', 'sales_admin', 'salesman', 'warehouse_staff', 'accounts_manager', 'support_staff', 'compliance_admin'
-      ];
+
+    function hasRole(role) {
+      return isActive() && (
+        getRole() == role ||
+        (role == 'owner' && getRole() == 'owner') ||
+        (role == 'salesAdmin' && (getRole() == 'salesAdmin' || getRole() == 'sales_admin')) ||
+        (role == 'salesman' && getRole() == 'salesman') ||
+        (role == 'accountsManager' && (getRole() == 'accountsManager' || getRole() == 'accounts_manager')) ||
+        (role == 'complianceAdmin' && (getRole() == 'complianceAdmin' || getRole() == 'compliance_admin')) ||
+        (role == 'supportStaff' && (getRole() == 'supportStaff' || getRole() == 'support_staff')) ||
+        (role == 'warehouseStaff' && (getRole() == 'warehouseStaff' || getRole() == 'warehouse_staff')) ||
+        (role == 'customer' && (getRole() == 'customer' || getRole() == 'customer_owner' || getRole() == 'customer_buyer'))
+      );
+    }
+
+    function isCRMStaff() {
+      return isActive() && (
+        getRole() in ['owner', 'salesAdmin', 'sales_admin', 'salesman', 'accountsManager', 'accounts_manager', 'complianceAdmin', 'compliance_admin', 'supportStaff', 'support_staff', 'warehouseStaff', 'warehouse_staff']
+      );
     }
 
     function isCustomer() {
-      return isActive() && getUserData().role in ['customer_owner', 'customer_buyer'];
+      return hasRole('customer');
     }
     
     function belongsToInstitution(instId) {
       return isActive() && getUserData().institutionId == instId;
     }
 
-    // Collection Rules
-    
-    // Users
+    // USERS collection
     match /users/{userId} {
-      allow read: if isAuthenticated() && (isStaff() || request.auth.uid == userId);
-      allow create: if isActive() && (
-        hasRole('owner') ||
-        hasRole('sales_admin') ||
-        (
-          request.auth.uid == userId &&
-          request.resource.data.role in ['customer_owner', 'customer_buyer'] &&
-          request.resource.data.status == 'pending_approval'
-        )
-      );
-      allow update: if isAuthenticated() && (
-        hasRole('owner') || 
-        hasRole('sales_admin') || 
-        (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status']))
-      );
-      allow delete: if false;
+      allow read: if isAuthenticated() && (request.auth.uid == userId || hasRole('owner') || hasRole('salesAdmin'));
+      allow create: if hasRole('owner') || hasRole('salesAdmin');
+      allow update: if hasRole('owner') ||
+                    (request.auth.uid == userId &&
+                     !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'disabled', 'status']));
+      allow delete: if hasRole('owner');
     }
 
-    // Staff profile records used by the admin CRM.
+    // STAFF collection
     match /staff/{staffId} {
       allow read: if isAuthenticated();
-      allow create, update: if isActive() && hasRole('owner');
+      allow create, update: if hasRole('owner');
       allow delete: if false;
     }
 
-    // Roles
+    // ROLES collection
     match /roles/{roleId} {
       allow read: if isAuthenticated();
       allow write: if hasRole('owner');
     }
 
-    // Institutions
+    // CUSTOMERS / INSTITUTIONS
+    match /customers/{customerId} {
+      allow read: if isCRMStaff() || (isCustomer() && resource.data.linkedUid == request.auth.uid);
+      allow create: if hasRole('owner') || hasRole('salesAdmin') || hasRole('salesman');
+      allow update: if hasRole('owner') || hasRole('salesAdmin') || hasRole('salesman') || hasRole('supportStaff');
+      allow delete: if hasRole('owner');
+    }
+
     match /institutions/{instId} {
-      allow read: if isAuthenticated() && (isStaff() || belongsToInstitution(instId));
-      allow create, update: if isActive() && (hasRole('owner') || hasRole('sales_admin') || hasRole('compliance_admin'));
+      allow read: if isCRMStaff() || belongsToInstitution(instId);
+      allow create, update: if hasRole('owner') || hasRole('salesAdmin') || hasRole('complianceAdmin');
       allow delete: if false;
     }
 
-    // Contacts / CRM Follow Ups
+    // CRM Follow Ups
     match /followUps/{followId} {
-      allow read: if isStaff();
-      allow write: if isActive() && (hasRole('owner') || hasRole('sales_admin') || hasRole('salesman'));
+      allow read: if isCRMStaff();
+      allow write: if hasRole('owner') || hasRole('salesAdmin') || hasRole('salesman');
     }
-
     match /follow_ups/{followId} {
-      allow read: if isStaff();
-      allow write: if isActive() && (hasRole('owner') || hasRole('sales_admin') || hasRole('salesman'));
+      allow read: if isCRMStaff();
+      allow write: if hasRole('owner') || hasRole('salesAdmin') || hasRole('salesman');
     }
 
     // Visit Logs
     match /visitLogs/{logId} {
-      allow read: if isStaff();
-      allow write: if isActive() && (hasRole('owner') || hasRole('sales_admin') || hasRole('salesman'));
+      allow read: if isCRMStaff();
+      allow write: if hasRole('owner') || hasRole('salesAdmin') || hasRole('salesman');
     }
-
     match /visit_logs/{logId} {
-      allow read: if isStaff();
-      allow write: if isActive() && (hasRole('owner') || hasRole('sales_admin') || hasRole('salesman'));
+      allow read: if isCRMStaff();
+      allow write: if hasRole('owner') || hasRole('salesAdmin') || hasRole('salesman');
     }
 
-    // Products
-    match /products/{prodId} {
-      allow read: if isAuthenticated();
-      allow write: if isActive() && (hasRole('owner') || hasRole('sales_admin') || hasRole('warehouse_staff'));
-    }
-
-    // Categories
-    match /categories/{catId} {
-      allow read: if isAuthenticated();
-      allow write: if isActive() && (hasRole('owner') || hasRole('sales_admin') || hasRole('warehouse_staff'));
-    }
-
-    // Stock Batches
-    match /stock_batches/{batchId} {
-      allow read, write: if isActive() && (hasRole('owner') || hasRole('warehouse_staff'));
-    }
-
-    // Orders
+    // ORDERS
     match /orders/{orderId} {
-      allow read: if isAuthenticated() && (isStaff() || belongsToInstitution(resource.data.institutionId));
-      // Customers can create orders for their institution
-      allow create: if isActive() && (
-        isStaff() || 
-        (getUserData().role in ['customer_owner', 'customer_buyer'] && 
-         request.resource.data.institutionId == getUserData().institutionId &&
-         request.resource.data.status == 'pending_approval')
-      );
-      // Staff can update, or customers can update their own pending orders to cancelled
-      allow update: if isActive() && (
-        isStaff() ||
-        (belongsToInstitution(resource.data.institutionId) &&
-         resource.data.status == 'pending_approval' &&
-         request.resource.data.status == 'cancelled' &&
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
-      );
-      allow delete: if false;
+      allow read: if isCRMStaff() || (isCustomer() && (resource.data.linkedUid == request.auth.uid || belongsToInstitution(resource.data.institutionId)));
+      allow create: if isCRMStaff() || isCustomer();
+      allow update: if hasRole('owner') || hasRole('salesAdmin') ||
+                    (hasRole('warehouseStaff') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dispatchStatus', 'dispatchDate', 'trackingNumber', 'status'])) ||
+                    (hasRole('accountsManager') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paymentStatus', 'paymentDate', 'paymentRef', 'status']));
+      allow delete: if hasRole('owner');
     }
 
     match /order_items/{itemId} {
-      allow read: if isAuthenticated() && (isStaff() || belongsToInstitution(resource.data.institutionId));
-      allow create, update: if isActive() && isStaff();
+      allow read: if isCRMStaff() || (isCustomer() && belongsToInstitution(resource.data.institutionId));
+      allow create, update: if isCRMStaff();
       allow delete: if false;
     }
 
-    // Quotations
-    match /quotations/{quoteId} {
-      allow read: if isAuthenticated() && (isStaff() || belongsToInstitution(resource.data.institutionId));
-      allow create: if isActive() && (
-        isStaff() || 
-        (getUserData().role in ['customer_owner', 'customer_buyer'] && 
-         request.resource.data.institutionId == getUserData().institutionId &&
-         request.resource.data.status == 'submitted')
-      );
-      allow update: if isActive() && (
-        isStaff() || 
-        (belongsToInstitution(resource.data.institutionId) && 
-         request.resource.data.status in ['accepted', 'rejected'])
-      );
-      allow delete: if false;
+    // INVOICES
+    match /invoices/{invoiceId} {
+      allow read: if hasRole('owner') || hasRole('salesAdmin') || hasRole('accountsManager') || (isCustomer() && (resource.data.linkedUid == request.auth.uid || belongsToInstitution(resource.data.institutionId)));
+      allow create, update: if hasRole('owner') || hasRole('salesAdmin') || hasRole('accountsManager');
+      allow delete: if hasRole('owner');
     }
 
-    // Credit Accounts
-    match /creditAccounts/{accId} {
-      allow read: if isAuthenticated() && (isStaff() || belongsToInstitution(resource.data.institutionId));
-      allow write: if isActive() && (hasRole('owner') || hasRole('sales_admin') || hasRole('accounts_manager'));
+    // PAYMENTS
+    match /payments/{paymentId} {
+      allow read: if hasRole('owner') || hasRole('salesAdmin') || hasRole('accountsManager') || (isCustomer() && (resource.data.linkedUid == request.auth.uid || belongsToInstitution(resource.data.institutionId)));
+      allow create: if hasRole('owner') || hasRole('accountsManager') || isCustomer();
+      allow update, delete: if hasRole('owner');
     }
 
-    match /credit_accounts/{accId} {
-      allow read: if isAuthenticated() && (isStaff() || belongsToInstitution(resource.data.institutionId));
-      allow write: if isActive() && (hasRole('owner') || hasRole('sales_admin') || hasRole('accounts_manager'));
+    // PRODUCTS
+    match /products/{productId} {
+      allow read: if isAuthenticated();
+      allow write: if hasRole('owner') || hasRole('salesAdmin') || hasRole('warehouseStaff');
     }
 
-    // Invoices
-    match /invoices/{invId} {
-      allow read: if isAuthenticated() && (isStaff() || belongsToInstitution(resource.data.institutionId));
-      allow write: if isActive() && (hasRole('owner') || hasRole('sales_admin') || hasRole('accounts_manager'));
+    match /categories/{catId} {
+      allow read: if isAuthenticated();
+      allow write: if hasRole('owner') || hasRole('salesAdmin') || hasRole('warehouseStaff');
     }
 
-    // Payments
-    match /payments/{payId} {
-      allow read: if isAuthenticated() && (isStaff() || belongsToInstitution(resource.data.institutionId));
-      // Customer owners can submit payment records
-      allow create: if isActive() && (
-        isStaff() ||
-        (getUserData().role == 'customer_owner' && 
-         request.resource.data.institutionId == getUserData().institutionId &&
-         request.resource.data.status == 'pending')
-      );
-      allow update: if isActive() && (hasRole('owner') || hasRole('sales_admin') || hasRole('accounts_manager'));
-      allow delete: if false;
+    match /stock_batches/{batchId} {
+      allow read, write: if hasRole('owner') || hasRole('warehouseStaff');
     }
 
-    // Purchase Orders (Procurement)
-    match /procurement/{poId} {
-      allow read, write: if isActive() && (hasRole('owner') || hasRole('warehouse_staff'));
+    // DOCUMENTS (KYC, agreements)
+    match /documents/{docId} {
+      allow read: if hasRole('owner') || hasRole('complianceAdmin') || hasRole('salesAdmin') || (isCustomer() && resource.data.ownerId == request.auth.uid);
+      allow create: if hasRole('owner') || hasRole('complianceAdmin') || hasRole('salesAdmin') || isCustomer();
+      allow update, delete: if hasRole('owner') || hasRole('complianceAdmin');
     }
 
-    // Suppliers
-    match /suppliers/{supId} {
-      allow read, write: if isActive() && (hasRole('owner') || hasRole('warehouse_staff'));
-    }
-
-    // Support Tickets
+    // SUPPORT TICKETS
     match /tickets/{ticketId} {
-      allow read: if isAuthenticated() && (isStaff() || belongsToInstitution(resource.data.institutionId));
-      allow create: if isActive() && (
-        isStaff() || 
-        (getUserData().role in ['customer_owner', 'customer_buyer'] && 
-         request.resource.data.institutionId == getUserData().institutionId &&
-         request.resource.data.status == 'open')
-      );
-      allow update: if isActive() && (
-        isStaff() || 
-        (belongsToInstitution(resource.data.institutionId) && 
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['messages', 'status']))
-      );
-      allow delete: if false;
+      allow read: if hasRole('owner') || hasRole('supportStaff') || hasRole('salesAdmin') || (isCustomer() && (resource.data.createdBy == request.auth.uid || belongsToInstitution(resource.data.institutionId)));
+      allow create: if isAuthenticated();
+      allow update: if hasRole('owner') || hasRole('supportStaff') ||
+                    (isCustomer() && (resource.data.createdBy == request.auth.uid || belongsToInstitution(resource.data.institutionId)) &&
+                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastCustomerMessage', 'updatedAt', 'messages']));
+      allow delete: if hasRole('owner');
     }
-
     match /support_tickets/{ticketId} {
-      allow read: if isAuthenticated() && (isStaff() || belongsToInstitution(resource.data.institutionId));
-      allow create: if isActive() && (
-        isStaff() || 
-        (getUserData().role in ['customer_owner', 'customer_buyer'] && 
-         request.resource.data.institutionId == getUserData().institutionId &&
-         request.resource.data.status == 'open')
-      );
-      allow update: if isActive() && (
-        isStaff() || 
-        (belongsToInstitution(resource.data.institutionId) && 
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['messages', 'status']))
-      );
-      allow delete: if false;
+      allow read: if hasRole('owner') || hasRole('supportStaff') || hasRole('salesAdmin') || (isCustomer() && (resource.data.createdBy == request.auth.uid || belongsToInstitution(resource.data.institutionId)));
+      allow create: if isAuthenticated();
+      allow update: if hasRole('owner') || hasRole('supportStaff') ||
+                    (isCustomer() && (resource.data.createdBy == request.auth.uid || belongsToInstitution(resource.data.institutionId)) &&
+                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastCustomerMessage', 'updatedAt', 'messages']));
+      allow delete: if hasRole('owner');
     }
 
-    // Notifications
-    match /notifications/{notId} {
-      allow read: if isAuthenticated() && (isStaff() || resource.data.recipientId == request.auth.uid);
-      allow create: if isActive() && (
-        isStaff() ||
-        (isCustomer() && request.resource.data.recipientId == request.auth.uid)
-      );
-      allow update: if isAuthenticated() && (
-        isStaff() ||
-        (
-          resource.data.recipientId == request.auth.uid &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt'])
-        )
-      );
-      allow delete: if isAuthenticated() && isStaff();
+    // AUDIT LOGS (immutable & append-only)
+    match /auditLogs/{logId} {
+      allow read: if hasRole('owner') || hasRole('complianceAdmin');
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
     }
-
-    // Returns
-    match /returns/{retId} {
-      allow read: if isAuthenticated() && (isStaff() || belongsToInstitution(resource.data.institutionId));
-      allow create: if isActive() && (
-        isStaff() ||
-        (getUserData().role == 'customer_owner' &&
-         request.resource.data.institutionId == getUserData().institutionId &&
-         request.resource.data.status == 'pending')
-      );
-      allow update: if isActive() && (hasRole('owner') || hasRole('warehouse_staff'));
-      allow delete: if false;
-    }
-
-    // Audit Logs
     match /audits/{logId} {
-      allow read: if isActive() && (hasRole('owner') || hasRole('compliance_admin'));
-      allow create: if isActive();
+      allow read: if hasRole('owner') || hasRole('complianceAdmin');
+      allow create: if isAuthenticated();
       allow update, delete: if false;
     }
 
-    // Compliance Records
-    match /compliance_records/{recordId} {
-      allow read: if isActive() && (isStaff() || belongsToInstitution(resource.data.institutionId));
-      allow write: if isActive() && (hasRole('owner') || hasRole('compliance_admin'));
+    // NOTIFICATIONS
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated() && (resource.data.recipientId == request.auth.uid || resource.data.targetUid == request.auth.uid);
+      allow create: if isCRMStaff();
+      allow update: if isAuthenticated() && (resource.data.recipientId == request.auth.uid || resource.data.targetUid == request.auth.uid) &&
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt', 'dismissed', 'read']);
+      allow delete: if hasRole('owner');
     }
 
+    // TASKS / FOLLOW-UPS
+    match /tasks/{taskId} {
+      allow read: if hasRole('owner') || hasRole('salesAdmin') || (hasRole('salesman') && resource.data.assignedTo == request.auth.uid);
+      allow create, update: if hasRole('owner') || hasRole('salesAdmin') || hasRole('salesman');
+      allow delete: if hasRole('owner') || hasRole('salesAdmin');
+    }
+
+    // SETTINGS
+    match /settings/{settingId} {
+      allow read: if isCRMStaff();
+      allow write: if hasRole('owner');
+    }
+
+    // RETURNS
+    match /returns/{retId} {
+      allow read: if isCRMStaff() || belongsToInstitution(resource.data.institutionId);
+      allow create: if isCRMStaff() || isCustomer();
+      allow update: if hasRole('owner') || hasRole('warehouseStaff');
+      allow delete: if false;
+    }
+
+    // PROCUREMENT & SUPPLIERS
+    match /procurement/{poId} {
+      allow read, write: if hasRole('owner') || hasRole('warehouseStaff');
+    }
+    match /suppliers/{supId} {
+      allow read, write: if hasRole('owner') || hasRole('warehouseStaff');
+    }
+
+    // COMPLIANCE RECORDS
+    match /compliance_records/{recordId} {
+      allow read: if isCRMStaff() || belongsToInstitution(resource.data.institutionId);
+      allow write: if hasRole('owner') || hasRole('complianceAdmin');
+    }
+
+    // COUNTERS
+    match /counters/{counterId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Default deny rule
     match /{document=**} {
       allow read, write: if false;
     }

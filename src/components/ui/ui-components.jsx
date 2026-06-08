@@ -233,3 +233,42 @@ export const Modal = ({ open, title, onClose, children }) => {
     </div>
   );
 };
+
+export const SkeletonTable = ({ rows = 5, cols = 4 }) => {
+  return (
+    <div className="w-full space-y-4 animate-pulse">
+      <div className="h-6 bg-slate-200 rounded w-1/4 mb-4"></div>
+      {[...Array(rows)].map((_, rIdx) => (
+        <div key={rIdx} className="flex gap-4 border-b border-slate-100 py-3">
+          {[...Array(cols)].map((_, cIdx) => (
+            <div key={cIdx} className="h-4 bg-slate-200 rounded flex-1"></div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+export const SkeletonCard = () => (
+  <div className="bg-[var(--bg-base)] border border-[var(--border)] rounded-xl p-5 space-y-4 animate-pulse w-full">
+    <div className="h-4 bg-slate-200 rounded w-1/3"></div>
+    <div className="h-3 bg-slate-200 rounded w-2/3"></div>
+    <div className="h-24 bg-slate-200 rounded w-full"></div>
+  </div>
+);
+
+export const ConfirmationDialog = ({ open, title, message, onConfirm, onCancel, confirmText = 'Confirm', cancelText = 'Cancel', variant = 'danger' }) => {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-[var(--bg-base)] border border-[var(--border)] p-6 shadow-2xl flex flex-col gap-4 animate-scale-in">
+        <h2 className="text-md font-bold text-[var(--text-primary)]">{title}</h2>
+        <p className="text-sm text-[var(--text-secondary)]">{message}</p>
+        <div className="flex justify-end gap-3 pt-2">
+          <Button variant="secondary" onClick={onCancel}>{cancelText}</Button>
+          <Button variant={variant} onClick={onConfirm}>{confirmText}</Button>
+        </div>
+      </div>
+    </div>
+  );
+};

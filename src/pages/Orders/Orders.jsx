@@ -27,11 +27,15 @@ export default function Orders() {
   const orders = useCollection('orders');
   const institutions = useCollection('institutions');
   const products = useCollection('products');
+  const invoices = useCollection('invoices');
+  const payments = useCollection('payments');
+
   const [modalOpen, setModalOpen] = useState(false);
   const [detailModal, setDetailModal] = useState(null);
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [creditError, setCreditError] = useState('');
 
   const emptyForm = { institutionName: '', items: [{ productName: '', quantity: 1, unitPrice: 0 }], paymentMode: 'credit', status: 'pending', notes: '' };
   const [form, setForm] = useState(emptyForm);
@@ -63,19 +67,50 @@ export default function Orders() {
 
   const addItem = () => setForm({ ...form, items: [...form.items, { productName: '', quantity: 1, unitPrice: 0 }] });
   const removeItem = (idx) => setForm({ ...form, items: form.items.filter((_, i) => i !== idx) });
+  const creditCheck = useMemo(() => {
+    if (!form.institutionName || form.paymentMode !== 'credit') return { overLimit: false, available: 0, creditLimit: 0 };
+    const inst = institutions.find((i) => i.name === form.institutionName);
+    if (!inst) return { overLimit: false, available: 0, creditLimit: 0 };
+    
+    const instInvoices = invoices.filter((inv) => inv.institutionName === inst.name);
+    const instPayments = payments.filter((pay) => pay.institutionName === inst.name);
+    const totalBilled = instInvoices.reduce((s, inv) => s + Number(inv.total || inv.amount || 0), 0);
+    const totalPaid = instPayments.reduce((s, pay) => s + Number(pay.amount || 0), 0);
+    const outstanding = totalBilled - totalPaid;
+    const creditLimit = Number(inst.creditLimit || 0);
+    const creditUsed = outstanding > 0 ? outstanding : 0;
+    const creditAvailable = Math.max(0, creditLimit - creditUsed);
+    
+    const overLimit = (creditUsed + orderTotal) > creditLimit;
+    return { overLimit, available: creditAvailable, creditLimit };
+  }, [form.institutionName, form.paymentMode, form.items, orderTotal, institutions, invoices, payments]);
+
+  const getAllowedStatuses = () => {
+    if (user?.role === 'owner' || user?.role === 'sales_admin') return ORDER_STATUSES;
+    if (user?.role === 'warehouse_staff') {
+      return ORDER_STATUSES.filter(s => ['processing', 'dispatched', 'delivered'].includes(s.value));
+    }
+    if (user?.role === 'accounts_manager') {
+      return ORDER_STATUSES.filter(s => ['confirmed', 'processing'].includes(s.value));
+    }
+    return ORDER_STATUSES.filter(s => ['pending', 'cancelled'].includes(s.value));
+  };
 
   const handleSave = () => {
     if (!form.institutionName || form.items.length === 0) return;
-    const orderNumber = `ORD-${Date.now().toString().slice(-6)}`;
+    setCreditError('');
+    if (form.paymentMode === 'credit' && creditCheck.overLimit) {
+      setCreditError("This order exceeds the institution's credit limit. Submission blocked.");
+      return;
+    }
     const total = form.items.reduce((s, i) => s + (i.quantity * i.unitPrice), 0);
     if (editing) {
       db.updateOrder(editing.id, { ...form, total });
     } else {
-      db.addOrder({ ...form, orderNumber, total, createdBy: user?.name || user?.email || '' });
+      db.addOrder({ ...form, total, createdBy: user?.name || user?.email || '' });
     }
     setModalOpen(false);
   };
-
   const filtered = orders.filter((o) => {
     const matchSearch = o.orderNumber?.toLowerCase().includes(search.toLowerCase()) || o.institutionName?.toLowerCase().includes(search.toLowerCase());
     const matchStatus = !statusFilter || o.status === statusFilter;
@@ -183,14 +218,25 @@ export default function Orders() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Select label="Payment Mode" value={form.paymentMode} onChange={(e) => setForm({ ...form, paymentMode: e.target.value })} options={PAYMENT_MODES} />
-            <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} options={ORDER_STATUSES} />
+            <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} options={getAllowedStatuses()} />
           </div>
           <Textarea label="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Order notes…" />
+          
+          {creditCheck.overLimit && (
+            <div className="p-3 text-xs bg-rose-50 border border-rose-200 text-rose-700 rounded-lg flex items-center gap-2">
+              <span className="font-semibold">⚠️ Credit Limit Exceeded:</span>
+              <span>Available credit: {currency.format(creditCheck.available)} / Limit: {currency.format(creditCheck.creditLimit)}.</span>
+            </div>
+          )}
+
+          {creditError && (
+            <p className="text-sm text-[var(--danger)] font-medium">{creditError}</p>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
             <Button onClick={handleSave}>{editing ? 'Save Changes' : 'Create Order'}</Button>
-          </div>
-        </div>
+          </div>        </div>
       </Modal>
     </div>
   );
