@@ -52,6 +52,81 @@ export default function DeliveryManagement() {
     return matchSearch && matchStatus;
   });
 
+  const printPackingSlip = (order) => {
+    const win = window.open('', '_blank');
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Packing Slip - ${order.orderNumber}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 30px; color: #111; }
+          h1 { font-size: 22px; margin: 0; }
+          .header { display: flex; justify-content: space-between; margin-bottom: 24px; border-bottom: 2px solid #111; padding-bottom: 16px; }
+          .section { margin-bottom: 20px; }
+          .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #666; }
+          .value { font-size: 14px; font-weight: 600; margin-top: 2px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+          th { text-align: left; font-size: 11px; text-transform: uppercase; border-bottom: 1px solid #ddd; padding: 8px 4px; color: #666; }
+          td { padding: 8px 4px; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
+          .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #ddd; font-size: 11px; color: #666; text-align: center; }
+          @media print { body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <h1>PACKING SLIP</h1>
+            <div style="font-size:12px;color:#666;margin-top:4px">Ganga Maxx Marketplace</div>
+          </div>
+          <div style="text-align:right">
+            <div class="label">Order Number</div>
+            <div class="value">${order.orderNumber}</div>
+            <div class="label" style="margin-top:8px">Date</div>
+            <div class="value">${order.createdAt || new Date().toISOString().slice(0,10)}</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div class="section">
+            <div class="label">Deliver To</div>
+            <div class="value">${order.institutionName || '—'}</div>
+          </div>
+          <div class="section">
+            <div class="label">Driver / Vehicle</div>
+            <div class="value">${order.driverName || '—'} ${order.vehicleNumber ? '· ' + order.vehicleNumber : ''}</div>
+            <div class="label" style="margin-top:8px">Delivery Date</div>
+            <div class="value">${order.deliveryDate || '—'}</div>
+          </div>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>Product</th><th>SKU</th><th>Qty</th><th>Unit</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(order.items || []).map((item, i) => `
+              <tr>
+                <td>${i + 1}</td>
+                <td>${item.productName || item.name || '—'}</td>
+                <td>${item.sku || '—'}</td>
+                <td><strong>${item.quantity}</strong></td>
+                <td>${item.unitOfMeasure || item.unit || 'units'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        ${order.deliveryNotes ? `<div class="section" style="margin-top:20px"><div class="label">Delivery Notes</div><div style="font-size:13px;margin-top:4px">${order.deliveryNotes}</div></div>` : ''}
+        <div class="footer">
+          Received in good condition: _________________________ Date: _____________ Signature: _____________
+        </div>
+      </body>
+      </html>
+    `);
+    win.document.close();
+    setTimeout(() => { win.print(); }, 400);
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Delivery Management" subtitle="Track order deliveries, assign drivers, and update shipment status." />
@@ -87,7 +162,29 @@ export default function DeliveryManagement() {
                     <td className="px-5 py-3 text-[var(--text-secondary)] font-mono text-xs">{o.vehicleNumber || '—'}</td>
                     <td className="px-5 py-3 text-[var(--text-secondary)]">{o.deliveryDate || '—'}</td>
                     <td className="px-5 py-3"><Badge type={o.deliveryStatus || 'pending'} text={(o.deliveryStatus || 'pending').replace(/_/g, ' ')} /></td>
-                    <td className="px-5 py-3 text-right"><Button variant="outline" size="xs" icon={Pencil} onClick={() => openEdit(o)}>Update</Button></td>
+                    <td className="px-5 py-3 text-right flex gap-1 justify-end">
+                      {(!o.deliveryStatus || o.deliveryStatus === 'pending') && (
+                        <Button
+                          variant="primary"
+                          size="xs"
+                          icon={Truck}
+                          onClick={() => {
+                            openEdit(o);
+                            setForm(prev => ({
+                              ...prev,
+                              deliveryStatus: 'in_transit',
+                              deliveryDate: o.deliveryDate || new Date().toISOString().slice(0, 10),
+                            }));
+                          }}
+                        >
+                          Dispatch
+                        </Button>
+                      )}
+                      <Button variant="outline" size="xs" onClick={() => printPackingSlip(o)}>
+                        🖨 Slip
+                      </Button>
+                      <Button variant="outline" size="xs" icon={Pencil} onClick={() => openEdit(o)}>Update</Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

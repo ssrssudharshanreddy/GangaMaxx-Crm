@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useCollection } from '../../hooks/useDb';
 import { useAuth } from '../../context/AuthContext';
-import { db } from '../../services';
+import { db, logAuditAction } from '../../services';
 import { PageHeader, Card, Button, Input, Select, Badge, Modal, EmptyState, Textarea } from '../../components/ui/ui-components';
-import { FileText, Plus, Pencil, Eye, Copy } from 'lucide-react';
+import { FileText, Plus, Pencil, Eye, Copy, ShoppingCart } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const STATUSES = [
   { value: 'draft', label: 'Draft' },
@@ -11,6 +12,7 @@ const STATUSES = [
   { value: 'accepted', label: 'Accepted' },
   { value: 'rejected', label: 'Rejected' },
   { value: 'expired', label: 'Expired' },
+  { value: 'converted', label: 'Converted to Order' },
 ];
 
 const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
@@ -69,6 +71,46 @@ export default function QuotationManagement() {
     setDetailModal(null);
   };
 
+  const handleConvertToOrder = async (quotation) => {
+    if (!quotation?.items?.length) {
+      toast.error('Quotation has no items to convert.');
+      return;
+    }
+    const orderNumber = `PO-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const institution = institutions.find(i => i.name === quotation.institutionName);
+    
+    await db.addOrder({
+      orderNumber,
+      institutionId: institution?.id || '',
+      institutionName: quotation.institutionName,
+      status: 'pending',
+      total: quotation.total || 0,
+      items: quotation.items.map(item => ({
+        productId: item.productId || '',
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        price: item.unitPrice,
+      })),
+      sourceQuotationId: quotation.id,
+      sourceQuotationNumber: quotation.quotationNumber,
+      createdBy: user?.email || '',
+    });
+    
+    await db.updateQuotation(quotation.id, { status: 'converted' });
+    
+    logAuditAction(
+      user.id, user.email, user.role,
+      'QUOTATION_CONVERTED',
+      'quotation',
+      quotation.id,
+      { quotationNumber: quotation.quotationNumber, orderNumber }
+    );
+    
+    toast.success(`Order ${orderNumber} created from quotation ${quotation.quotationNumber}`);
+    setDetailModal(null);
+  };
+
   const filtered = quotations.filter((q) => {
     const matchSearch = q.quotationNumber?.toLowerCase().includes(search.toLowerCase()) || q.institutionName?.toLowerCase().includes(search.toLowerCase());
     const matchStatus = !statusFilter || q.status === statusFilter;
@@ -110,7 +152,15 @@ export default function QuotationManagement() {
                     <td className="px-5 py-3 text-[var(--text-secondary)]">{q.items?.length || 0}</td>
                     <td className="px-5 py-3 text-right font-semibold text-[var(--text-primary)]">{currency.format(q.total || 0)}</td>
                     <td className="px-5 py-3 text-[var(--text-secondary)]">{q.validUntil || '—'}</td>
-                    <td className="px-5 py-3"><Badge type={q.status} /></td>
+                    <td className="px-5 py-3">
+                      {q.status === 'converted' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          Converted
+                        </span>
+                      ) : (
+                        <Badge type={q.status} />
+                      )}
+                    </td>
                     <td className="px-5 py-3 text-[var(--text-secondary)]">{q.createdAt}</td>
                     <td className="px-5 py-3 text-right flex gap-1 justify-end">
                       <Button variant="outline" size="xs" icon={Eye} onClick={() => setDetailModal(q)}>View</Button>
@@ -130,7 +180,16 @@ export default function QuotationManagement() {
           <div className="flex flex-col gap-4 text-sm">
             <div className="grid grid-cols-2 gap-3">
               <div><span className="text-[var(--text-secondary)]">Institution:</span> <strong>{detailModal.institutionName}</strong></div>
-              <div><span className="text-[var(--text-secondary)]">Status:</span> <Badge type={detailModal.status} /></div>
+              <div>
+                <span className="text-[var(--text-secondary)]">Status:</span>{' '}
+                {detailModal.status === 'converted' ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Converted
+                  </span>
+                ) : (
+                  <Badge type={detailModal.status} />
+                )}
+              </div>
               <div><span className="text-[var(--text-secondary)]">Valid Until:</span> {detailModal.validUntil || '—'}</div>
               <div><span className="text-[var(--text-secondary)]">Date:</span> {detailModal.createdAt}</div>
             </div>
@@ -154,6 +213,15 @@ export default function QuotationManagement() {
             <div className="text-right text-lg font-bold text-[var(--text-primary)]">Total: {currency.format(detailModal.total || 0)}</div>
             {detailModal.status === 'sent' && (
               <Button icon={Copy} onClick={() => convertToOrder(detailModal)}>Convert to Order</Button>
+            )}
+            {detailModal?.status === 'accepted' && (
+              <Button
+                icon={ShoppingCart}
+                onClick={() => handleConvertToOrder(detailModal)}
+                variant="primary"
+              >
+                Convert to Order
+              </Button>
             )}
           </div>
         )}

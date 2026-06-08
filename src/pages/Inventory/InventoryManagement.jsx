@@ -36,12 +36,24 @@ export default function InventoryManagement() {
   const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
 
   const handleAdjust = async () => {
-    if (!adjustingProduct || adjustQty < 0) return;
+    if (!adjustingProduct) return;
+    if (isNaN(adjustQty) || adjustQty < 0) {
+      toast.error('Adjustment quantity must be a non-negative number');
+      return;
+    }
     const current = adjustingProduct.stockLevel || 0;
     let newStock;
-    if (adjustType === 'add') newStock = current + adjustQty;
-    else if (adjustType === 'remove') newStock = Math.max(0, current - adjustQty);
-    else newStock = adjustQty; // set
+    if (adjustType === 'add') {
+      newStock = current + adjustQty;
+    } else if (adjustType === 'remove') {
+      if (adjustQty > current) {
+        toast.error('Cannot remove more stock than is currently available');
+        return;
+      }
+      newStock = current - adjustQty;
+    } else {
+      newStock = adjustQty; // set
+    }
     
     await db.updateProduct(adjustingProduct.id, { stockLevel: newStock });
     logAuditAction(

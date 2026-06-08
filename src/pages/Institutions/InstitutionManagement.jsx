@@ -64,12 +64,17 @@ const emptyForm = {
   contactName: '',
   contactEmail: '',
   contactPhone: '',
-  contactPassword: ''
+  contactPassword: '',
+  assignedSalesmanId: '',
+  assignedSalesmanEmail: '',
 };
 
 export default function InstitutionManagement() {
   const { user } = useAuth();
   const institutions = useCollection('institutions');
+  const staff = useCollection('staff');
+  const orders = useCollection('orders');
+  
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -95,7 +100,9 @@ export default function InstitutionManagement() {
       contactName: inst.contactPerson?.name || '',
       contactEmail: inst.contactPerson?.email || '',
       contactPhone: inst.contactPerson?.phone || '',
-      contactPassword: ''
+      contactPassword: '',
+      assignedSalesmanId: inst.assignedSalesmanId || '',
+      assignedSalesmanEmail: inst.assignedSalesmanEmail || '',
     });
     setSaveLoading(false);
     setModalOpen(true);
@@ -123,6 +130,8 @@ export default function InstitutionManagement() {
           status: form.status,
           creditLimit: Number(form.creditLimit || 0),
           contractTerms: form.contractTerms,
+          assignedSalesmanId: form.assignedSalesmanId || '',
+          assignedSalesmanEmail: form.assignedSalesmanEmail || '',
           contactPerson: {
             name: form.contactName,
             email: editing.contactPerson?.email || '',
@@ -162,6 +171,8 @@ export default function InstitutionManagement() {
           status: form.status,
           creditLimit: Number(form.creditLimit || 0),
           contractTerms: form.contractTerms,
+          assignedSalesmanId: form.assignedSalesmanId || '',
+          assignedSalesmanEmail: form.assignedSalesmanEmail || '',
           contactPerson: {
             name: form.contactName,
             email: form.contactEmail,
@@ -266,6 +277,7 @@ export default function InstitutionManagement() {
                   <th className="px-5 py-3">GSTIN</th>
                   <th className="px-5 py-3">Credit Limit</th>
                   <th className="px-5 py-3">Terms</th>
+                  <th className="px-5 py-3">Salesman</th>
                   <th className="px-5 py-3">Status</th>
                   <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
@@ -278,7 +290,23 @@ export default function InstitutionManagement() {
                     <td className="px-5 py-3 text-[var(--text-secondary)] font-mono text-xs">{inst.taxId}</td>
                     <td className="px-5 py-3 text-[var(--text-secondary)]">₹{Number(inst.creditLimit || 0).toLocaleString('en-IN')}</td>
                     <td className="px-5 py-3"><Badge type="default" text={inst.contractTerms?.replace(/_/g, ' ') || 'N/A'} /></td>
-                    <td className="px-5 py-3"><Badge type={inst.status} /></td>
+                    <td className="px-5 py-3 text-[var(--text-secondary)] text-sm">
+                      {staff.find(s => s.id === inst.assignedSalesmanId)?.name || '—'}
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex flex-col gap-1 items-start sm:flex-row sm:items-center sm:gap-2">
+                        <Badge type={inst.status} />
+                        {(() => {
+                          const instOrders = orders.filter(o => o.institutionName === inst.name || o.institutionId === inst.id);
+                          const pendingCount = instOrders.filter(o => ['pending','pending_approval','processing'].includes(o.status)).length;
+                          return pendingCount > 0 ? (
+                            <span className="text-[10px] font-semibold bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-full">
+                              {pendingCount} active order{pendingCount > 1 ? 's' : ''}
+                            </span>
+                          ) : null;
+                        })()}
+                      </div>
+                    </td>
                     <td className="px-5 py-3 text-right">
                       <Button variant="outline" size="xs" icon={Pencil} onClick={() => openEdit(inst)}>Edit</Button>
                     </td>
@@ -328,6 +356,23 @@ export default function InstitutionManagement() {
             <Input label="Credit Limit (₹)" type="number" min="0" value={form.creditLimit} onChange={(e) => setForm({ ...form, creditLimit: Number(e.target.value) })} disabled={saveLoading} />
             <Select label="Payment Terms" value={form.contractTerms} onChange={(e) => setForm({ ...form, contractTerms: e.target.value })} options={TERMS} disabled={saveLoading} />
           </div>
+          <Select
+            label="Assigned Salesman"
+            value={form.assignedSalesmanId}
+            onChange={(e) => {
+              const selected = staff.find(s => s.id === e.target.value);
+              setForm({
+                ...form,
+                assignedSalesmanId: e.target.value,
+                assignedSalesmanEmail: selected?.email || '',
+              });
+            }}
+            options={[
+              { value: '', label: 'Unassigned' },
+              ...staff.filter(s => s.role === 'salesman').map(s => ({ value: s.id, label: s.name }))
+            ]}
+            disabled={saveLoading}
+          />
           <div className="border-t border-[var(--border)] pt-4 mt-2">
             <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-3">Contact Person & Credentials</h3>
             <div className="flex flex-col gap-4">
@@ -348,4 +393,3 @@ export default function InstitutionManagement() {
     </div>
   );
 }
-

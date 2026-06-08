@@ -1,15 +1,10 @@
-import React from 'react';
-import { AlertTriangle, RotateCw, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react';
+import { Component } from 'react';
+import logger from '../../services/logger';
 
-export class ErrorBoundary extends React.Component {
+export class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
-    this.state = { 
-      hasError: false, 
-      error: null, 
-      errorInfo: null,
-      showDetails: false 
-    };
+    this.state = { hasError: false, error: null };
   }
 
   static getDerivedStateFromError(error) {
@@ -17,87 +12,37 @@ export class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    this.setState({ errorInfo });
-    // In production, you would send this to an error reporting service
+    logger.error('React component tree crash caught by ErrorBoundary', error, errorInfo);
   }
 
   handleReset = () => {
-    this.setState({ 
-      hasError: false, 
-      error: null, 
-      errorInfo: null,
-      showDetails: false 
-    });
-    if (this.props.onReset) {
-      this.props.onReset();
-    }
-  };
-
-  handleHardReload = () => {
+    this.setState({ hasError: false, error: null });
     window.location.reload();
   };
 
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex min-h-screen items-center justify-center bg-[var(--bg-secondary)] px-4 py-12 transition-colors duration-150 sm:px-6 lg:px-8">
-          <div className="w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--bg-base)] p-8 shadow-xl transition-all duration-300 hover:shadow-2xl">
-            <div className="flex flex-col items-center text-center">
-              <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-[var(--danger-light)] text-[var(--danger)] mb-6 animate-scale-in">
-                <AlertTriangle className="h-8 w-8" />
-              </div>
-              
-              <h1 className="text-2xl font-bold tracking-tight text-[var(--text-primary)] sm:text-3xl">
-                Something went wrong
-              </h1>
-              
-              <p className="mt-3 text-sm text-[var(--text-secondary)] max-w-md">
-                An unexpected application error occurred. We have logged this error and are looking into it.
+        <div className="flex min-h-screen flex-col items-center justify-center bg-slate-50 p-6 text-center">
+          <div className="max-w-md w-full rounded-2xl bg-white border border-slate-100 shadow-xl p-8 space-y-6">
+            <div className="flex items-center justify-center w-12 h-12 bg-rose-50 text-rose-500 rounded-full mx-auto">
+              <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold text-slate-800">Something went wrong</h2>
+              <p className="text-sm text-slate-500">
+                An unexpected application error occurred. Diagnostic logs have been recorded.
               </p>
             </div>
-
-            <div className="mt-8 space-y-4">
-              {/* Primary Actions */}
-              <div className="flex flex-col gap-3 sm:flex-row sm:justify-stretch">
-                <button
-                  onClick={this.handleReset}
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-[var(--brand)] px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors duration-150 hover:bg-[var(--brand-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
-                >
-                  <RotateCw className="h-4 w-4" />
-                  Try Again
-                </button>
-                <button
-                  onClick={this.handleHardReload}
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-base)] px-5 py-3 text-sm font-semibold text-[var(--text-primary)] shadow-sm transition-colors duration-150 hover:bg-[var(--bg-secondary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand)]"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  Reload Page
-                </button>
-              </div>
-
-              {/* Technical Details (Collapsible) */}
-              {this.state.error && (
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] overflow-hidden">
-                  <button
-                    onClick={() => this.setState(prev => ({ showDetails: !prev.showDetails }))}
-                    className="flex w-full items-center justify-between px-4 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] transition-colors duration-150"
-                  >
-                    <span>Technical Details</span>
-                    {this.state.showDetails ? (
-                      <ChevronDown className="h-4 w-4" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
-                    )}
-                  </button>
-                  
-                  {this.state.showDetails && (
-                    <div className="border-t border-[var(--border)] p-4 font-mono text-[11px] leading-relaxed text-[var(--danger-text)] bg-[var(--danger-light)] max-h-60 overflow-y-auto whitespace-pre-wrap">
-                      <p className="font-bold mb-1">{this.state.error.toString()}</p>
-                      {this.state.errorInfo && this.state.errorInfo.componentStack}
-                    </div>
-                  )}
-                </div>
-              )}
+            <div className="flex gap-3 justify-center">
+              <button
+                onClick={this.handleReset}
+                className="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                Reload Platform
+              </button>
             </div>
           </div>
         </div>
@@ -107,3 +52,5 @@ export class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
+
+export default ErrorBoundary;

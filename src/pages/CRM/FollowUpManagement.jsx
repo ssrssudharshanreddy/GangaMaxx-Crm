@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useCollection } from '../../hooks/useDb';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services';
 import { PageHeader, Card, Button, Input, Select, Badge, Modal, EmptyState, Textarea } from '../../components/ui/ui-components';
 import { CalendarCheck, Plus, Pencil, Clock } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const PRIORITIES = [
   { value: 'high', label: 'High' },
@@ -56,17 +57,38 @@ export default function FollowUpManagement() {
     setModalOpen(false);
   };
 
-  const filtered = followUps.filter((item) => {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const enrichedFollowUps = useMemo(() => followUps.map(item => ({
+    ...item,
+    isAutoOverdue: item.status === 'pending' && item.scheduledDate && item.scheduledDate < today,
+  })), [followUps, today]);
+
+  const filtered = enrichedFollowUps.filter((item) => {
     const matchSearch = item.institutionName?.toLowerCase().includes(search.toLowerCase()) || item.contactPerson?.toLowerCase().includes(search.toLowerCase());
     const matchStatus = !statusFilter || item.status === statusFilter;
     return matchSearch && matchStatus;
   });
+
+  const overdueCount = enrichedFollowUps.filter(f => f.isAutoOverdue).length;
 
   const priorityColor = { high: 'text-rose-600', medium: 'text-amber-600', low: 'text-emerald-600' };
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Follow-Up Management" subtitle="Track and manage customer follow-up activities." actions={<Button icon={Plus} onClick={openAdd}>New Follow-Up</Button>} />
+
+      {overdueCount > 0 && (
+        <div
+          className="flex items-center gap-3 p-3 bg-rose-50 border border-rose-200 rounded-xl cursor-pointer"
+          onClick={() => setStatusFilter('pending')}
+        >
+          <Clock className="h-4 w-4 text-rose-600 flex-shrink-0" />
+          <span className="text-sm text-rose-700 font-medium">
+            {overdueCount} follow-up{overdueCount > 1 ? 's are' : ' is'} overdue. Click to filter.
+          </span>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-3">
         <Input placeholder="Search by institution or contact…" value={search} onChange={(e) => setSearch(e.target.value)} className="flex-1 min-w-[200px]" />
@@ -98,10 +120,32 @@ export default function FollowUpManagement() {
                     <td className="px-5 py-3 text-[var(--text-secondary)]">{item.contactPerson || '—'}</td>
                     <td className="px-5 py-3"><Badge type="default" text={item.type?.replace(/_/g, ' ')} /></td>
                     <td className={`px-5 py-3 font-semibold capitalize ${priorityColor[item.priority] || ''}`}>{item.priority}</td>
-                    <td className="px-5 py-3 text-[var(--text-secondary)] flex items-center gap-1.5"><Clock className="h-3.5 w-3.5" />{item.scheduledDate}</td>
+                    <td className={`px-5 py-3 flex items-center gap-1.5 ${item.isAutoOverdue ? 'text-rose-600 font-semibold' : 'text-[var(--text-secondary)]'}`}>
+                      <Clock className={`h-3.5 w-3.5 ${item.isAutoOverdue ? 'text-rose-600' : ''}`} />
+                      {item.scheduledDate}
+                    </td>
                     <td className="px-5 py-3 text-[var(--text-secondary)]">{item.assignedTo || '—'}</td>
-                    <td className="px-5 py-3"><Badge type={item.status} /></td>
-                    <td className="px-5 py-3 text-right"><Button variant="outline" size="xs" icon={Pencil} onClick={() => openEdit(item)}>Edit</Button></td>
+                    <td className="px-5 py-3 flex items-center gap-2">
+                      <Badge type={item.status} />
+                      {item.isAutoOverdue && (
+                        <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">OVERDUE</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-right flex gap-1 justify-end">
+                      {item.status !== 'completed' && (
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          onClick={() => {
+                            db.updateFollowUp(item.id, { status: 'completed' });
+                            toast.success(`Follow-up with ${item.institutionName} marked complete.`);
+                          }}
+                        >
+                          ✓ Done
+                        </Button>
+                      )}
+                      <Button variant="outline" size="xs" icon={Pencil} onClick={() => openEdit(item)}>Edit</Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
