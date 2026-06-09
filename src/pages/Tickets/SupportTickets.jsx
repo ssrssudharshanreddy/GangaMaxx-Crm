@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useCollection } from '../../hooks/useDb';
 import { useAuth } from '../../context/AuthContext';
-import { db } from '../../services';
+import { db, logAuditAction } from '../../services';
 import { PageHeader, Card, Button, Input, Select, Badge, Modal, EmptyState, Textarea } from '../../components/ui/ui-components';
 import { Headset, Plus, Pencil, MessageSquare } from 'lucide-react';
 
@@ -54,8 +54,26 @@ export default function SupportTickets() {
     const ticketNumber = `TKT-${Date.now().toString().slice(-6)}`;
     if (editing) {
       db.updateTicket(editing.id, form);
+      logAuditAction(
+        user.id,
+        user.email,
+        user.role,
+        'update_ticket',
+        'ticket',
+        editing.id,
+        `Updated ticket ${editing.ticketNumber || editing.id} details`
+      );
     } else {
       db.addTicket({ ...form, ticketNumber, createdBy: user?.name || user?.email || '', messages: [] });
+      logAuditAction(
+        user.id,
+        user.email,
+        user.role,
+        'create_ticket',
+        'ticket',
+        ticketNumber,
+        `Created support ticket ${ticketNumber} for ${form.institutionName}: ${form.subject}`
+      );
     }
     setModalOpen(false);
   };
@@ -64,6 +82,15 @@ export default function SupportTickets() {
     if (!replyText.trim() || !replyModal) return;
     const messages = [...(replyModal.messages || []), { author: user?.name || user?.email || 'Admin', text: replyText, timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16) }];
     db.updateTicket(replyModal.id, { messages });
+    logAuditAction(
+      user.id,
+      user.email,
+      user.role,
+      'reply_ticket',
+      'ticket',
+      replyModal.id,
+      `Replied to ticket ${replyModal.ticketNumber || replyModal.id}`
+    );
     setReplyText('');
     setReplyModal({ ...replyModal, messages });
   };

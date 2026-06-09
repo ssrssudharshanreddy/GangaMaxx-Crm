@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useCollection } from '../../hooks/useDb';
-import { PageHeader, Card, Button, Input, Badge, EmptyState, SectionCard, Modal, Select, Textarea } from '../../components/ui/ui-components';
-import { Warehouse, AlertTriangle, Package } from 'lucide-react';
+import { PageHeader, Card, Button, Input, Badge, EmptyState, Modal, Select } from '../../components/ui/ui-components';
+import { Warehouse, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { db, logAuditAction } from '../../services';
 import toast from 'react-hot-toast';

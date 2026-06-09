@@ -1,8 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useCollection } from '../../hooks/useDb';
 import { useAuth } from '../../context/AuthContext';
 import { db, logAuditAction } from '../../services';
-import { PageHeader, Card, Button, Input, Select, Badge, Modal, EmptyState, SectionCard } from '../../components/ui/ui-components';
+import { PageHeader, Card, Button, Input, Select, Modal, EmptyState, SectionCard } from '../../components/ui/ui-components';
 import { Banknote, Plus, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -52,10 +52,12 @@ export default function PaymentManagement() {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     if (!form.institutionName || !form.amount) return;
     const paymentNumber = `PAY-${Date.now().toString().slice(-6)}`;
-    db.addPayment({ ...form, paymentNumber, amount: Number(form.amount), recordedBy: user?.name || user?.email || '' });
+    const selectedInst = institutions.find(i => i.name === form.institutionName);
+    const institutionId = selectedInst ? selectedInst.id : '';
+    db.addPayment({ ...form, institutionId, paymentNumber, amount: Number(form.amount), recordedBy: user?.name || user?.email || '' });
 
     // Update invoice status if linked
     if (form.invoiceNumber) {
@@ -72,11 +74,14 @@ export default function PaymentManagement() {
       }
     }
     setModalOpen(false);
-  };
+  }, [form, institutions, invoices, payments, user]);
 
-  const handleQuickMarkPaid = async (invoice) => {
+  const handleQuickMarkPaid = useCallback(async (invoice) => {
     const paymentRef = `PAY-${Date.now().toString().slice(-8)}`;
+    const selectedInst = institutions.find(i => i.name === invoice.institutionName || i.id === invoice.institutionId);
+    const institutionId = selectedInst ? selectedInst.id : '';
     await db.addPayment({
+      institutionId,
       institutionName: invoice.institutionName,
       invoiceNumber: invoice.invoiceNumber || invoice.id,
       amount: invoice.total || invoice.amount || 0,
@@ -89,7 +94,7 @@ export default function PaymentManagement() {
     logAuditAction(user.id, user.email, user.role, 'INVOICE_MARKED_PAID', 'invoice', invoice.id,
       { invoiceNumber: invoice.invoiceNumber, amount: invoice.total || invoice.amount, paymentRef });
     toast.success(`Invoice ${invoice.invoiceNumber || invoice.id} marked as paid.`);
-  };
+  }, [institutions, user]);
 
   const filtered = payments.filter((p) =>
     p.paymentNumber?.toLowerCase().includes(search.toLowerCase()) ||

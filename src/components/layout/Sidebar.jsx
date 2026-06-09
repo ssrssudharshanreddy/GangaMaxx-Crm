@@ -24,49 +24,49 @@ const navSections = [
   {
     title: 'Core',
     items: [
-      { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['owner', 'sales_admin', 'salesman', 'warehouse_staff', 'accounts_manager', 'support_staff', 'compliance_admin'] },
+      { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['owner', 'sales_admin', 'salesman', 'warehouse_manager', 'warehouse_staff', 'accounts_manager', 'accounts_executive', 'support_manager', 'support_staff', 'compliance_manager'] },
     ],
   },
   {
     title: 'Sales',
     items: [
       { name: 'Staff', path: '/staff', icon: Users, roles: ['owner'] },
-      { name: 'Institutions', path: '/institutions', icon: Building2, roles: ['owner', 'sales_admin', 'compliance_admin'] },
+      { name: 'Institutions', path: '/institutions', icon: Building2, roles: ['owner', 'sales_admin', 'compliance_manager'] },
       { name: 'Follow Ups', path: '/follow-ups', icon: CalendarDays, roles: ['owner', 'sales_admin', 'salesman'] },
       { name: 'Visit Logs', path: '/visit-logs', icon: MapPin, roles: ['owner', 'sales_admin', 'salesman'] },
       { name: 'Quotations', path: '/quotations', icon: FileText, roles: ['owner', 'sales_admin', 'salesman'] },
-      { name: 'Orders', path: '/orders', icon: ShoppingCart, roles: ['owner', 'sales_admin', 'salesman', 'warehouse_staff', 'accounts_manager', 'support_staff'] },
+      { name: 'Orders', path: '/orders', icon: ShoppingCart, roles: ['owner', 'sales_admin', 'salesman', 'warehouse_manager', 'warehouse_staff', 'accounts_manager', 'accounts_executive', 'support_manager', 'support_staff'] },
     ],
   },
   {
     title: 'Operations',
     items: [
-      { name: 'Products', path: '/products', icon: Boxes, roles: ['owner', 'warehouse_staff', 'salesman'] },
-      { name: 'Inventory', path: '/inventory', icon: Package, roles: ['owner', 'warehouse_staff'] },
-      { name: 'Procurement', path: '/procurement', icon: Truck, roles: ['owner', 'warehouse_staff'] },
-      { name: 'Deliveries', path: '/deliveries', icon: Box, roles: ['owner', 'sales_admin', 'salesman', 'warehouse_staff'] },
-      { name: 'Returns', path: '/returns', icon: CheckCircle, roles: ['owner', 'warehouse_staff'] },
+      { name: 'Products', path: '/products', icon: Boxes, roles: ['owner', 'warehouse_manager', 'warehouse_staff', 'salesman'] },
+      { name: 'Inventory', path: '/inventory', icon: Package, roles: ['owner', 'warehouse_manager', 'warehouse_staff'] },
+      { name: 'Procurement', path: '/procurement', icon: Truck, roles: ['owner', 'warehouse_manager'] },
+      { name: 'Deliveries', path: '/deliveries', icon: Box, roles: ['owner', 'sales_admin', 'salesman', 'warehouse_manager', 'warehouse_staff'] },
+      { name: 'Returns', path: '/returns', icon: CheckCircle, roles: ['owner', 'warehouse_manager', 'warehouse_staff'] },
     ],
   },
   {
     title: 'Finance',
     items: [
-      { name: 'Credit Accounts', path: '/credit-accounts', icon: CreditCard, roles: ['owner', 'sales_admin', 'accounts_manager'] },
-      { name: 'Invoices', path: '/invoices', icon: FileCheck2, roles: ['owner', 'sales_admin', 'accounts_manager'] },
-      { name: 'Payments', path: '/payments', icon: CreditCard, roles: ['owner', 'sales_admin', 'accounts_manager'] },
+      { name: 'Credit Accounts', path: '/credit-accounts', icon: CreditCard, roles: ['owner', 'sales_admin', 'accounts_manager', 'accounts_executive'] },
+      { name: 'Invoices', path: '/invoices', icon: FileCheck2, roles: ['owner', 'sales_admin', 'accounts_manager', 'accounts_executive'] },
+      { name: 'Payments', path: '/payments', icon: CreditCard, roles: ['owner', 'sales_admin', 'accounts_manager', 'accounts_executive'] },
     ],
   },
   {
     title: 'Support',
     items: [
-      { name: 'Support Tickets', path: '/support-tickets', icon: LifeBuoy, roles: ['owner', 'support_staff'] },
+      { name: 'Support Tickets', path: '/support-tickets', icon: LifeBuoy, roles: ['owner', 'support_manager', 'support_staff'] },
     ],
   },
   {
     title: 'Compliance',
     items: [
-      { name: 'Compliance', path: '/compliance', icon: ShieldCheck, roles: ['owner', 'compliance_admin'] },
-      { name: 'Reports', path: '/reports', icon: BarChart3, roles: ['owner', 'sales_admin'] },
+      { name: 'Compliance', path: '/compliance', icon: ShieldCheck, roles: ['owner', 'compliance_manager'] },
+      { name: 'Reports', path: '/reports', icon: BarChart3, roles: ['owner', 'sales_admin', 'accounts_manager', 'support_manager', 'compliance_manager'] },
     ],
   },
 ];

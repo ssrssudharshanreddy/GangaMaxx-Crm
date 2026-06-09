@@ -33,18 +33,18 @@ service cloud.firestore {
         (role == 'owner' && getRole() == 'owner') ||
         (role == 'salesAdmin' && (getRole() == 'salesAdmin' || getRole() == 'sales_admin')) ||
         (role == 'salesman' && getRole() == 'salesman') ||
-        (role == 'accountsManager' && (getRole() == 'accountsManager' || getRole() == 'accounts_manager')) ||
-        (role == 'complianceAdmin' && (getRole() == 'complianceAdmin' || getRole() == 'compliance_admin')) ||
-        (role == 'supportStaff' && (getRole() == 'supportStaff' || getRole() == 'support_staff')) ||
-        (role == 'warehouseStaff' && (getRole() == 'warehouseStaff' || getRole() == 'warehouse_staff')) ||
-        (role == 'customer' && (getRole() == 'customer' || getRole() == 'customer_owner' || getRole() == 'customer_buyer'))
+        (role == 'accountsManager' && (getRole() == 'accountsManager' || getRole() == 'accounts_manager' || getRole() == 'accounts_executive')) ||
+        (role == 'complianceAdmin' && (getRole() == 'complianceAdmin' || getRole() == 'compliance_admin' || getRole() == 'compliance_manager')) ||
+        (role == 'supportStaff' && (getRole() == 'supportStaff' || getRole() == 'support_staff' || getRole() == 'support_manager')) ||
+        (role == 'warehouseStaff' && (getRole() == 'warehouseStaff' || getRole() == 'warehouse_staff' || getRole() == 'warehouse_manager')) ||
+        (role == 'customer' && (getRole() == 'customer' || getRole() == 'customer_owner' || getRole() == 'customer_buyer' || getRole() == 'customer_admin' || getRole() == 'customer_user'))
       );
     }
 
     // Helper checking if the user is administrative CRM staff
     function isCRMStaff() {
       return isActive() && (
-        getRole() in ['owner', 'salesAdmin', 'sales_admin', 'salesman', 'accountsManager', 'accounts_manager', 'complianceAdmin', 'compliance_admin', 'supportStaff', 'support_staff', 'warehouseStaff', 'warehouse_staff']
+        getRole() in ['owner', 'salesAdmin', 'sales_admin', 'salesman', 'accountsManager', 'accounts_manager', 'accounts_executive', 'complianceAdmin', 'compliance_admin', 'compliance_manager', 'supportStaff', 'support_staff', 'support_manager', 'warehouseStaff', 'warehouse_staff', 'warehouse_manager']
       );
     }
 
@@ -101,11 +101,6 @@ service cloud.firestore {
 
     // 3. ORDERS COLLECTION
     match /orders/{orderId} {
-      // - customers can only read/write their own orders
-      // - warehouseStaff can read orders and update dispatch status only
-      // - accountsManager can read all orders
-      // - complianceAdmin has read-only access
-      // - salesAdmin / owner have full access
       allow read: if hasRole('owner') || 
                   hasRole('salesAdmin') || 
                   hasRole('warehouseStaff') || 
@@ -114,7 +109,8 @@ service cloud.firestore {
                   (hasRole('salesman') && resource.data.assignedSalesmanId == request.auth.uid) ||
                   (hasRole('customer') && (resource.data.linkedUid == request.auth.uid || belongsToInstitution(resource.data.institutionId)));
       
-      allow create: if hasRole('owner') || hasRole('salesAdmin') || hasRole('salesman') || hasRole('customer');
+      allow create: if hasRole('owner') || hasRole('salesAdmin') || hasRole('salesman') || 
+                    (hasRole('customer') && request.resource.data.institutionId == getUserData().institutionId);
       
       allow update: if hasRole('owner') || 
                     hasRole('salesAdmin') ||
@@ -133,14 +129,56 @@ service cloud.firestore {
     }
 
     match /payments/{paymentId} {
-      // accountsManager can read all orders and write payment records
       allow read: if hasRole('owner') || hasRole('salesAdmin') || hasRole('accountsManager') || isReadOnlyCompliance() || (hasRole('customer') && belongsToInstitution(resource.data.institutionId));
-      allow create: if hasRole('owner') || hasRole('salesAdmin') || hasRole('accountsManager') || hasRole('customer');
+      allow create: if hasRole('owner') || hasRole('salesAdmin') || hasRole('accountsManager') || 
+                    (hasRole('customer') && request.resource.data.institutionId == getUserData().institutionId);
       allow update: if hasRole('owner') || hasRole('salesAdmin') || hasRole('accountsManager');
       allow delete: if hasRole('owner');
     }
 
-    // 5. OTHER COLLECTIONS (Audit Logs, Products, Tickets, Settings, Counters)
+    // 5. QUOTATIONS, CREDIT ACCOUNTS, RETURNS & NOTIFICATIONS
+    match /quotations/{quotationId} {
+      allow read: if isCRMStaff() || isReadOnlyCompliance() || (hasRole('customer') && belongsToInstitution(resource.data.institutionId));
+      allow create, update: if hasRole('owner') || hasRole('salesAdmin') || hasRole('salesman');
+      allow delete: if hasRole('owner');
+    }
+
+    match /creditAccounts/{accId} {
+      allow read: if isCRMStaff() || (hasRole('customer') && belongsToInstitution(resource.data.institutionId)) || isReadOnlyCompliance();
+      allow write: if hasRole('owner') || hasRole('salesAdmin') || hasRole('accountsManager');
+    }
+
+    match /returns/{returnId} {
+      allow read: if isCRMStaff() || (hasRole('customer') && belongsToInstitution(resource.data.institutionId)) || isReadOnlyCompliance();
+      allow create: if isAuthenticated() && (isCRMStaff() || (hasRole('customer') && request.resource.data.institutionId == getUserData().institutionId));
+      allow update: if isCRMStaff();
+      allow delete: if hasRole('owner');
+    }
+
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated() && (resource.data.recipientId == request.auth.uid || isCRMStaff());
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (resource.data.recipientId == request.auth.uid || isCRMStaff());
+      allow delete: if hasRole('owner');
+    }
+
+    // 6. CRM VISIT LOGS, FOLLOW UPS & PROCUREMENT
+    match /visitLogs/{logId} {
+      allow read: if hasRole('owner') || hasRole('salesAdmin') || (hasRole('salesman') && resource.data.salespersonId == request.auth.uid) || isReadOnlyCompliance();
+      allow write: if hasRole('owner') || hasRole('salesAdmin') || hasRole('salesman');
+    }
+
+    match /followUps/{followId} {
+      allow read: if hasRole('owner') || hasRole('salesAdmin') || (hasRole('salesman') && resource.data.assignedTo == request.auth.uid) || isReadOnlyCompliance();
+      allow write: if hasRole('owner') || hasRole('salesAdmin') || hasRole('salesman');
+    }
+
+    match /procurement/{poId} {
+      allow read: if hasRole('owner') || hasRole('warehouseStaff') || isReadOnlyCompliance();
+      allow write: if hasRole('owner') || hasRole('warehouseStaff');
+    }
+
+    // 7. OTHER COLLECTIONS (Staff, Products, Tickets, Settings, Counters)
     match /staff/{memberId} {
       allow read: if isAuthenticated();
       allow write: if hasRole('owner') || hasRole('salesAdmin');
@@ -164,7 +202,7 @@ service cloud.firestore {
 
     match /tickets/{ticketId} {
       allow read: if hasRole('owner') || hasRole('supportStaff') || hasRole('salesAdmin') || isReadOnlyCompliance() || (hasRole('customer') && belongsToInstitution(resource.data.institutionId));
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated() && (!hasRole('customer') || request.resource.data.institutionId == getUserData().institutionId);
       allow update: if hasRole('owner') || hasRole('supportStaff') || (hasRole('customer') && belongsToInstitution(resource.data.institutionId));
       allow delete: if hasRole('owner');
     }
@@ -173,7 +211,7 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
-    // 6. DEFAULT SECURITY GUARD
+    // 8. DEFAULT SECURITY GUARD
     match /{document=**} {
       allow read: if isReadOnlyCompliance();
       allow write: if false;

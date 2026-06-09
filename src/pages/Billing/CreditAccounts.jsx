@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useCollection } from '../../hooks/useDb';
-import { PageHeader, Card, Button, Input, Badge, EmptyState } from '../../components/ui/ui-components';
+import { PageHeader, Card, Input, Badge, EmptyState } from '../../components/ui/ui-components';
 import { CreditCard, AlertTriangle } from 'lucide-react';
 
 const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });

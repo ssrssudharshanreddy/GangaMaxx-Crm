@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useCollection } from '../../hooks/useDb';
 import { useAuth } from '../../context/AuthContext';
-import { db } from '../../services';
+import { db, logAuditAction } from '../../services';
 import { PageHeader, Card, Button, Input, Select, Badge, Modal, EmptyState, Textarea } from '../../components/ui/ui-components';
 import { Undo2, Plus, Pencil } from 'lucide-react';
 
@@ -45,8 +45,26 @@ export default function Returns() {
     const returnNumber = `RET-${Date.now().toString().slice(-6)}`;
     if (editing) {
       db.updateReturn(editing.id, form);
+      logAuditAction(
+        user.id,
+        user.email,
+        user.role,
+        'update_return',
+        'return',
+        editing.id,
+        `Updated return request ${editing.returnNumber || editing.id} status to ${form.status}`
+      );
     } else {
       db.addReturn({ ...form, returnNumber, createdBy: user?.name || user?.email || '' });
+      logAuditAction(
+        user.id,
+        user.email,
+        user.role,
+        'create_return',
+        'return',
+        returnNumber,
+        `Created return request ${returnNumber} for order ${form.orderNumber} (Qty: ${form.quantity}x ${form.productName})`
+      );
     }
     setModalOpen(false);
   };

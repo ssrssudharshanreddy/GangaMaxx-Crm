@@ -121,7 +121,11 @@ export default function Compliance() {
                     <td className="px-5 py-3"><Badge type="default" text={a.actorRole?.replace(/_/g, ' ')} /></td>
                     <td className="px-5 py-3 text-[var(--text-primary)] font-medium">{a.action?.replace(/_/g, ' ')}</td>
                     <td className="px-5 py-3 text-[var(--text-secondary)]">{a.entityType} #{a.entityId}</td>
-                    <td className="px-5 py-3 text-[var(--text-secondary)] max-w-[200px] truncate">{a.details}</td>
+                    <td className="px-5 py-3 text-[var(--text-secondary)] max-w-[200px] truncate">
+                      {typeof a.details === 'object' && a.details !== null
+                        ? Object.entries(a.details).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ')
+                        : String(a.details || '')}
+                    </td>
                   </tr>
                 ))}
               </tbody>

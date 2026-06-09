@@ -57,10 +57,13 @@ export default function QuotationManagement() {
     if (!form.institutionName) return;
     const total = form.items.reduce((s, i) => s + (i.quantity * i.unitPrice), 0);
     const quotationNumber = `QT-${Date.now().toString().slice(-6)}`;
+    const selectedInst = institutions.find(i => i.name === form.institutionName);
+    const institutionId = selectedInst ? selectedInst.id : '';
+
     if (editing) {
-      db.updateQuotation(editing.id, { ...form, total });
+      db.updateQuotation(editing.id, { ...form, institutionId, total });
     } else {
-      db.addQuotation({ ...form, quotationNumber, total, createdBy: user?.name || user?.email || '' });
+      db.addQuotation({ ...form, institutionId, quotationNumber, total, createdBy: user?.name || user?.email || '' });
     }
     setModalOpen(false);
   };

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useCollection } from '../../hooks/useDb';
 import { useAuth } from '../../context/AuthContext';
 import { db, logAuditAction } from '../../services';
@@ -83,8 +83,6 @@ export default function InstitutionManagement() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 25;
-
-  useEffect(() => setCurrentPage(1), [search, statusFilter]);
 
   const openAdd = () => { setEditing(null); setForm(emptyForm); setSaveLoading(false); setModalOpen(true); };
   const openEdit = (inst) => {
@@ -197,7 +195,7 @@ export default function InstitutionManagement() {
           name: form.contactName,
           email: form.contactEmail,
           phoneNumber: form.contactPhone || '',
-          role: 'customer_owner',
+          role: 'customer_admin',
           status: form.status === 'active' ? 'active' : 'pending_approval',
           institutionId: institutionId,
           createdAt: new Date().toISOString().slice(0, 10),
@@ -260,8 +258,25 @@ export default function InstitutionManagement() {
       />
 
       <div className="flex flex-wrap gap-3">
-        <Input placeholder="Search by name or GSTIN…" value={search} onChange={(e) => setSearch(e.target.value)} className="flex-1 min-w-[200px]" />
-        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={STATUSES} placeholder="All Statuses" className="w-48" />
+        <Input
+          placeholder="Search by name or GSTIN…"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setCurrentPage(1);
+          }}
+          className="flex-1 min-w-[200px]"
+        />
+        <Select
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setCurrentPage(1);
+          }}
+          options={STATUSES}
+          placeholder="All Statuses"
+          className="w-48"
+        />
       </div>
 
       {filtered.length === 0 ? (

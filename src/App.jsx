@@ -85,7 +85,7 @@ const DashboardLayout = () => {
               <Route
                 path="institutions"
                 element={
-                  <AuthenticatedRoute allowedRoles={['owner', 'sales_admin', 'compliance_admin']}>
+                  <AuthenticatedRoute allowedRoles={['owner', 'sales_admin', 'compliance_manager']}>
                     <InstitutionManagement />
                   </AuthenticatedRoute>
                 }
@@ -117,7 +117,7 @@ const DashboardLayout = () => {
               <Route
                 path="products"
                 element={
-                  <AuthenticatedRoute allowedRoles={['owner', 'warehouse_staff', 'salesman']}>
+                  <AuthenticatedRoute allowedRoles={['owner', 'warehouse_manager', 'warehouse_staff', 'salesman']}>
                     <ProductManagement />
                   </AuthenticatedRoute>
                 }
@@ -125,7 +125,7 @@ const DashboardLayout = () => {
               <Route
                 path="inventory"
                 element={
-                  <AuthenticatedRoute allowedRoles={['owner', 'warehouse_staff']}>
+                  <AuthenticatedRoute allowedRoles={['owner', 'warehouse_manager', 'warehouse_staff']}>
                     <InventoryManagement />
                   </AuthenticatedRoute>
                 }
@@ -133,7 +133,7 @@ const DashboardLayout = () => {
               <Route
                 path="procurement"
                 element={
-                  <AuthenticatedRoute allowedRoles={['owner', 'warehouse_staff']}>
+                  <AuthenticatedRoute allowedRoles={['owner', 'warehouse_manager']}>
                     <ProcurementManagement />
                   </AuthenticatedRoute>
                 }
@@ -141,7 +141,7 @@ const DashboardLayout = () => {
               <Route
                 path="returns"
                 element={
-                  <AuthenticatedRoute allowedRoles={['owner', 'warehouse_staff']}>
+                  <AuthenticatedRoute allowedRoles={['owner', 'warehouse_manager', 'warehouse_staff']}>
                     <Returns />
                   </AuthenticatedRoute>
                 }
@@ -149,7 +149,7 @@ const DashboardLayout = () => {
               <Route
                 path="orders"
                 element={
-                  <AuthenticatedRoute allowedRoles={['owner', 'sales_admin', 'salesman', 'warehouse_staff', 'accounts_manager', 'support_staff']}>
+                  <AuthenticatedRoute allowedRoles={['owner', 'sales_admin', 'salesman', 'warehouse_manager', 'warehouse_staff', 'accounts_manager', 'accounts_executive', 'support_manager', 'support_staff']}>
                     <Orders />
                   </AuthenticatedRoute>
                 }
@@ -157,7 +157,7 @@ const DashboardLayout = () => {
               <Route
                 path="deliveries"
                 element={
-                  <AuthenticatedRoute allowedRoles={['owner', 'sales_admin', 'salesman', 'warehouse_staff']}>
+                  <AuthenticatedRoute allowedRoles={['owner', 'sales_admin', 'salesman', 'warehouse_manager', 'warehouse_staff']}>
                     <DeliveryManagement />
                   </AuthenticatedRoute>
                 }
@@ -165,7 +165,7 @@ const DashboardLayout = () => {
               <Route
                 path="credit-accounts"
                 element={
-                  <AuthenticatedRoute allowedRoles={['owner', 'sales_admin', 'accounts_manager']}>
+                  <AuthenticatedRoute allowedRoles={['owner', 'sales_admin', 'accounts_manager', 'accounts_executive']}>
                     <CreditAccounts />
                   </AuthenticatedRoute>
                 }
@@ -173,7 +173,7 @@ const DashboardLayout = () => {
               <Route
                 path="invoices"
                 element={
-                  <AuthenticatedRoute allowedRoles={['owner', 'sales_admin', 'accounts_manager']}>
+                  <AuthenticatedRoute allowedRoles={['owner', 'sales_admin', 'accounts_manager', 'accounts_executive']}>
                     <InvoiceManagement />
                   </AuthenticatedRoute>
                 }
@@ -181,7 +181,7 @@ const DashboardLayout = () => {
               <Route
                 path="payments"
                 element={
-                  <AuthenticatedRoute allowedRoles={['owner', 'sales_admin', 'accounts_manager']}>
+                  <AuthenticatedRoute allowedRoles={['owner', 'sales_admin', 'accounts_manager', 'accounts_executive']}>
                     <PaymentManagement />
                   </AuthenticatedRoute>
                 }
@@ -189,7 +189,7 @@ const DashboardLayout = () => {
               <Route
                 path="support-tickets"
                 element={
-                  <AuthenticatedRoute allowedRoles={['owner', 'support_staff']}>
+                  <AuthenticatedRoute allowedRoles={['owner', 'support_manager', 'support_staff']}>
                     <SupportTickets />
                   </AuthenticatedRoute>
                 }
@@ -197,7 +197,7 @@ const DashboardLayout = () => {
               <Route
                 path="compliance"
                 element={
-                  <AuthenticatedRoute allowedRoles={['owner', 'compliance_admin']}>
+                  <AuthenticatedRoute allowedRoles={['owner', 'compliance_manager']}>
                     <Compliance />
                   </AuthenticatedRoute>
                 }
@@ -205,7 +205,7 @@ const DashboardLayout = () => {
               <Route
                 path="reports"
                 element={
-                  <AuthenticatedRoute allowedRoles={['owner', 'sales_admin']}>
+                  <AuthenticatedRoute allowedRoles={['owner', 'sales_admin', 'accounts_manager', 'support_manager', 'compliance_manager']}>
                     <Reports />
                   </AuthenticatedRoute>
                 }

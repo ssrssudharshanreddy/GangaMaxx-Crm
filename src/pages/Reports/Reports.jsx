@@ -1,7 +1,7 @@
 import { useMemo, useState, useCallback } from 'react';
 import { useCollection } from '../../hooks/useDb';
-import { PageHeader, Card, SectionCard, Button, Select } from '../../components/ui/ui-components';
-import { BarChart3, TrendingUp, DollarSign, Users, Package, ShoppingCart, FileText, Receipt, Headset, MapPin, CalendarCheck, Download } from 'lucide-react';
+import { PageHeader, Card, SectionCard, Button } from '../../components/ui/ui-components';
+import { BarChart3, TrendingUp, DollarSign, Users, Package, ShoppingCart, Receipt, Headset, MapPin, CalendarCheck, Download } from 'lucide-react';
 
 const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
 
@@ -16,10 +16,20 @@ const downloadCSV = (filename, headers, rows) => {
   a.click(); URL.revokeObjectURL(a.href);
 };
 
+const MetricCard = ({ icon: Icon, label, value, sub, color = '' }) => (
+  <Card className="space-y-1">
+    <div className="flex items-center gap-2">
+      {Icon && <Icon className={`h-4 w-4 ${color || 'text-[var(--text-tertiary)]'}`} />}
+      <div className="text-xs uppercase tracking-widest text-[var(--text-tertiary)]">{label}</div>
+    </div>
+    <div className={`text-2xl font-bold ${color || 'text-[var(--text-primary)]'}`}>{value}</div>
+    {sub && <div className="text-[11px] text-[var(--text-secondary)]">{sub}</div>}
+  </Card>
+);
+
 export default function Reports() {
   const institutions = useCollection('institutions');
   const orders = useCollection('orders');
-  const quotations = useCollection('quotations');
   const invoices = useCollection('invoices');
   const payments = useCollection('payments');
   const products = useCollection('products');
@@ -30,7 +40,6 @@ export default function Reports() {
   const returns = useCollection('returns');
   const staff = useCollection('staff');
 
-  const [reportView, setReportView] = useState('overview');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 
@@ -65,7 +74,6 @@ export default function Reports() {
   const totalSKUs = products.length;
   const lowStock = products.filter((p) => (p.stockLevel || 0) <= (p.reorderPoint || 10) && (p.stockLevel || 0) > 0).length;
   const outOfStock = products.filter((p) => (p.stockLevel || 0) === 0).length;
-  const inventoryValue = useMemo(() => products.reduce((s, p) => s + ((p.stockLevel || 0) * (p.basePrice || 0)), 0), [products]);
 
   // CRM
   const filteredTickets = useMemo(() => filterByDate(tickets), [tickets, filterByDate]);
@@ -106,16 +114,6 @@ export default function Reports() {
     return Object.entries(map).map(([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty).slice(0, 5);
   }, [filteredOrders]);
 
-  const MetricCard = ({ icon: Icon, label, value, sub, color = '' }) => (
-    <Card className="space-y-1">
-      <div className="flex items-center gap-2">
-        {Icon && <Icon className={`h-4 w-4 ${color || 'text-[var(--text-tertiary)]'}`} />}
-        <div className="text-xs uppercase tracking-widest text-[var(--text-tertiary)]">{label}</div>
-      </div>
-      <div className={`text-2xl font-bold ${color || 'text-[var(--text-primary)]'}`}>{value}</div>
-      {sub && <div className="text-[11px] text-[var(--text-secondary)]">{sub}</div>}
-    </Card>
-  );
 
   return (
     <div className="flex flex-col gap-6">

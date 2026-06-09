@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useCollection } from '../../hooks/useDb';
 import { useAuth } from '../../context/AuthContext';
-import { db, logAuditAction } from '../../services';
+import { logAuditAction } from '../../services';
 import { PageHeader, Card, Button, Input, Select, Badge, Modal, EmptyState } from '../../components/ui/ui-components';
 import { Users, Plus, Pencil } from 'lucide-react';
 import { firebaseConfig, firestore } from '../../config/firebase';
@@ -14,10 +14,13 @@ const ROLES = [
   { value: 'owner', label: 'Owner' },
   { value: 'sales_admin', label: 'Sales Admin' },
   { value: 'salesman', label: 'Salesman' },
+  { value: 'warehouse_manager', label: 'Warehouse Manager' },
   { value: 'warehouse_staff', label: 'Warehouse Staff' },
   { value: 'accounts_manager', label: 'Accounts Manager' },
+  { value: 'accounts_executive', label: 'Accounts Executive' },
+  { value: 'support_manager', label: 'Support Manager' },
   { value: 'support_staff', label: 'Support Staff' },
-  { value: 'compliance_admin', label: 'Compliance Admin' },
+  { value: 'compliance_manager', label: 'Compliance Manager' },
 ];
 
 const STATUSES = [

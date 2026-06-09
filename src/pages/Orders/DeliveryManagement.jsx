@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useCollection } from '../../hooks/useDb';
 import { useAuth } from '../../context/AuthContext';
-import { db } from '../../services';
+import { db, logAuditAction } from '../../services';
 import { PageHeader, Card, Button, Input, Select, Badge, Modal, EmptyState } from '../../components/ui/ui-components';
 import { Truck, Pencil } from 'lucide-react';
 
@@ -14,6 +14,7 @@ const DELIVERY_STATUSES = [
 ];
 
 export default function DeliveryManagement() {
+  const { user } = useAuth();
   const orders = useCollection('orders');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -43,6 +44,15 @@ export default function DeliveryManagement() {
       updates.status = 'delivered';
     }
     db.updateOrder(editing.id, updates);
+    logAuditAction(
+      user.id,
+      user.email,
+      user.role,
+      'update_delivery',
+      'order',
+      editing.id,
+      `Updated delivery status for order ${editing.orderNumber || editing.id} to ${form.deliveryStatus}`
+    );
     setModalOpen(false);
   };
 

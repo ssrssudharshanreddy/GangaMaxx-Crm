@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useCollection } from '../../hooks/useDb';
 import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services';
@@ -45,13 +45,14 @@ const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: '
 
 export default function Orders() {
   const { user } = useAuth();
-  const orders = useCollection('orders', useMemo(() => {
-    if (!user) return (data) => data;
+  const allOrders = useCollection('orders');
+  const orders = useMemo(() => {
+    if (!user) return allOrders;
     if (user.role === 'salesman') {
-      return (data) => data.filter(o => o.salesmanId === user.id || o.salesmanEmail === user.email);
+      return allOrders.filter(o => o.salesmanId === user.id || o.salesmanEmail === user.email);
     }
-    return (data) => data;
-  }, [user]));
+    return allOrders;
+  }, [allOrders, user]);
   const institutions = useCollection('institutions');
   const products = useCollection('products');
   const invoices = useCollection('invoices');
@@ -65,8 +66,6 @@ export default function Orders() {
   const [creditError, setCreditError] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 20;
-
-  useEffect(() => setCurrentPage(1), [search, statusFilter]);
 
   const emptyForm = { institutionName: '', items: [{ productName: '', quantity: 1, unitPrice: 0 }], paymentMode: 'credit', status: 'pending', notes: '' };
   const [form, setForm] = useState(emptyForm);
@@ -114,7 +113,7 @@ export default function Orders() {
     
     const overLimit = (creditUsed + orderTotal) > creditLimit;
     return { overLimit, available: creditAvailable, creditLimit };
-  }, [form.institutionName, form.paymentMode, form.items, orderTotal, institutions, invoices, payments]);
+  }, [form.institutionName, form.paymentMode, orderTotal, institutions, invoices, payments]);
 
   const getAllowedStatuses = () => {
     if (user?.role === 'owner' || user?.role === 'sales_admin') return ORDER_STATUSES;
@@ -135,6 +134,9 @@ export default function Orders() {
       return;
     }
     const total = form.items.reduce((s, i) => s + (i.quantity * i.unitPrice), 0);
+    const selectedInst = institutions.find(i => i.name === form.institutionName);
+    const institutionId = selectedInst ? selectedInst.id : '';
+
     if (editing) {
       if (editing.status !== form.status) {
         // Log audit
@@ -147,23 +149,21 @@ export default function Orders() {
         );
 
         // Push notification to customer
-        if (editing.institutionId) {
-          const institution = institutions.find(i => i.id === editing.institutionId || i.name === editing.institutionName);
-          if (institution?.contactPerson?.uid) {
-            db.addNotification({
-              recipientId: institution.contactPerson.uid,
-              type: 'order_status',
-              title: `Order ${editing.orderNumber || editing.id} updated`,
-              body: `Your order status changed from ${editing.status} to ${form.status}.`,
-              orderId: editing.id,
-              read: false,
-            });
-          }
+        const institution = institutions.find(i => i.id === editing.institutionId || i.name === editing.institutionName);
+        if (institution?.contactPerson?.uid) {
+          db.addNotification({
+            recipientId: institution.contactPerson.uid,
+            type: 'order_status',
+            title: `Order ${editing.orderNumber || editing.id} updated`,
+            body: `Your order status changed from ${editing.status} to ${form.status}.`,
+            orderId: editing.id,
+            read: false,
+          });
         }
       }
-      db.updateOrder(editing.id, { ...form, total, _changedBy: user?.email || user?.id });
+      db.updateOrder(editing.id, { ...form, institutionId, total, _changedBy: user?.email || user?.id });
     } else {
-      db.addOrder({ ...form, total, createdBy: user?.name || user?.email || '' });
+      db.addOrder({ ...form, institutionId, total, createdBy: user?.name || user?.email || '' });
     }
     setModalOpen(false);
   };
@@ -200,8 +200,25 @@ export default function Orders() {
       />
 
       <div className="flex flex-wrap gap-3">
-        <Input placeholder="Search by order # or institution…" value={search} onChange={(e) => setSearch(e.target.value)} className="flex-1 min-w-[200px]" />
-        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={ORDER_STATUSES} placeholder="All Statuses" className="w-44" />
+        <Input
+          placeholder="Search by order # or institution…"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setCurrentPage(1);
+          }}
+          className="flex-1 min-w-[200px]"
+        />
+        <Select
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setCurrentPage(1);
+          }}
+          options={ORDER_STATUSES}
+          placeholder="All Statuses"
+          className="w-44"
+        />
       </div>
 
       {filtered.length === 0 ? (

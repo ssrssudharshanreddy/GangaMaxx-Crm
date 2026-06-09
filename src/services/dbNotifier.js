@@ -12,7 +12,7 @@ export class DBNotifier {
     this.listeners.forEach((listener) => {
       try {
         listener(collection);
-      } catch (err) {
+      } catch {
         void 0;
       }
     });

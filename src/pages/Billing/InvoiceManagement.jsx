@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useCollection } from '../../hooks/useDb';
 import { useAuth } from '../../context/AuthContext';
-import { db } from '../../services';
+import { db, logAuditAction } from '../../services';
 import { PageHeader, Card, Button, Input, Select, Badge, Modal, EmptyState } from '../../components/ui/ui-components';
 import { Receipt, Plus, Pencil, Eye, Download } from 'lucide-react';
 
@@ -154,8 +154,6 @@ export default function InvoiceManagement() {
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 20;
 
-  useEffect(() => setCurrentPage(1), [search, statusFilter]);
-
   const emptyForm = { orderNumber: '', institutionName: '', amount: 0, status: 'unpaid', dueDate: '', notes: '' };
   const [form, setForm] = useState(emptyForm);
 
@@ -169,10 +167,31 @@ export default function InvoiceManagement() {
   const handleSave = () => {
     if (!form.institutionName || !form.amount) return;
     const invoiceNumber = `INV-${Date.now().toString().slice(-6)}`;
+    const selectedInst = institutions.find(i => i.name === form.institutionName);
+    const institutionId = selectedInst ? selectedInst.id : '';
+
     if (editing) {
-      db.updateInvoice(editing.id, { ...form, total: Number(form.amount) });
+      db.updateInvoice(editing.id, { ...form, institutionId, total: Number(form.amount) });
+      logAuditAction(
+        user.id,
+        user.email,
+        user.role,
+        'update_invoice',
+        'invoice',
+        editing.id,
+        `Updated invoice ${editing.invoiceNumber || editing.id} for ${form.institutionName} (Amount: ₹${form.amount})`
+      );
     } else {
-      db.addInvoice({ ...form, invoiceNumber, total: Number(form.amount), createdBy: user?.name || user?.email || '' });
+      db.addInvoice({ ...form, institutionId, invoiceNumber, total: Number(form.amount), createdBy: user?.name || user?.email || '' });
+      logAuditAction(
+        user.id,
+        user.email,
+        user.role,
+        'create_invoice',
+        'invoice',
+        invoiceNumber,
+        `Created invoice ${invoiceNumber} for ${form.institutionName} (Amount: ₹${form.amount})`
+      );
     }
     setModalOpen(false);
   };
@@ -228,8 +247,25 @@ export default function InvoiceManagement() {
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <Input placeholder="Search by invoice # or institution…" value={search} onChange={(e) => setSearch(e.target.value)} className="flex-1 min-w-[200px]" />
-        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} options={STATUSES} placeholder="All Statuses" className="w-44" />
+        <Input
+          placeholder="Search by invoice # or institution…"
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setCurrentPage(1);
+          }}
+          className="flex-1 min-w-[200px]"
+        />
+        <Select
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setCurrentPage(1);
+          }}
+          options={STATUSES}
+          placeholder="All Statuses"
+          className="w-44"
+        />
       </div>
 
       {filtered.length === 0 ? (

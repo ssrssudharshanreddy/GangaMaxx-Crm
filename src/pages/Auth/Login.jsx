@@ -8,18 +8,17 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [info, setInfo] = useState('');
+  const [info, setInfo] = useState(() => {
+    if (localStorage.getItem('gm_session_expired') === '1') {
+      localStorage.removeItem('gm_session_expired');
+      return 'Your session expired due to inactivity. Please sign in again.';
+    }
+    return '';
+  });
   const [loading, setLoading] = useState(false);
   const [lockoutRemaining, setLockoutRemaining] = useState(0);
   const { loginWithEmail } = useAuth();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (localStorage.getItem('gm_session_expired') === '1') {
-      setInfo('Your session expired due to inactivity. Please sign in again.');
-      localStorage.removeItem('gm_session_expired');
-    }
-  }, []);
 
   useEffect(() => {
     let interval;

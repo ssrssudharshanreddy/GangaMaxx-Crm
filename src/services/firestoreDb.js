@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, onSnapshot, updateDoc, runTransaction, setDoc, getDoc, query, limit, orderBy, arrayUnion } from 'firebase/firestore';
+import { addDoc, collection, doc, onSnapshot, updateDoc, runTransaction, setDoc, query, limit, orderBy, arrayUnion } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, firestore } from '../config/firebase';
 import { DBNotifier } from './dbNotifier';
