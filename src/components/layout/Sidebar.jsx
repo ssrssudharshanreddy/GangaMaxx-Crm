@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { MENU_PERMISSIONS } from '../../config/permissions';
 import {
   LayoutDashboard,
   Users,
@@ -12,61 +13,77 @@ import {
   FileText,
   CreditCard,
   LifeBuoy,
-  ShieldCheck,
-  BarChart3,
   Box,
-  CheckCircle,
+  RefreshCcw,
   FileCheck2,
   ShoppingCart,
+  Receipt,
+  UserCheck,
+  Tags,
+  FileDigit,
+  BarChart3,
+  ShieldCheck,
+  ClipboardList,
 } from 'lucide-react';
 
+/**
+ * navSections drives the sidebar — all role arrays derived from
+ * MENU_PERMISSIONS (src/config/permissions.js) to stay in sync.
+ */
 const navSections = [
   {
     title: 'Core',
     items: [
-      { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, roles: ['owner', 'sales_admin', 'salesman', 'warehouse_manager', 'warehouse_staff', 'accounts_manager', 'accounts_executive', 'support_manager', 'support_staff', 'compliance_manager'] },
+      { name: 'Dashboard',       path: '/dashboard',       icon: LayoutDashboard, key: 'dashboard' },
     ],
   },
   {
     title: 'Sales',
     items: [
-      { name: 'Staff', path: '/staff', icon: Users, roles: ['owner'] },
-      { name: 'Institutions', path: '/institutions', icon: Building2, roles: ['owner', 'sales_admin', 'compliance_manager'] },
-      { name: 'Follow Ups', path: '/follow-ups', icon: CalendarDays, roles: ['owner', 'sales_admin', 'salesman'] },
-      { name: 'Visit Logs', path: '/visit-logs', icon: MapPin, roles: ['owner', 'sales_admin', 'salesman'] },
-      { name: 'Quotations', path: '/quotations', icon: FileText, roles: ['owner', 'sales_admin', 'salesman'] },
-      { name: 'Orders', path: '/orders', icon: ShoppingCart, roles: ['owner', 'sales_admin', 'salesman', 'warehouse_manager', 'warehouse_staff', 'accounts_manager', 'accounts_executive', 'support_manager', 'support_staff'] },
+      { name: 'Sales Team',      path: '/staff',           icon: Users,         key: 'staff' },
+      { name: 'Customer Applications', path: '/customer-applications', icon: FileCheck2, key: 'customerApplications' },
+      { name: 'Customers',       path: '/institutions',    icon: Building2,     key: 'institutions' },
+      { name: 'Customer 360',    path: '/customer-360',    icon: UserCheck,     key: 'customer360' },
+      { name: 'Business Calendar', path: '/business-calendar', icon: CalendarDays,  key: 'businessCalendar' },
+      { name: 'Follow-Ups',      path: '/follow-ups',      icon: CalendarDays,  key: 'followUps' },
+      { name: 'Visits',          path: '/visit-logs',      icon: MapPin,        key: 'visitLogs' },
+      { name: 'Quotations',      path: '/quotations',      icon: FileText,      key: 'quotations' },
+      { name: 'Orders',          path: '/orders',          icon: ShoppingCart,  key: 'orders' },
     ],
   },
   {
     title: 'Operations',
     items: [
-      { name: 'Products', path: '/products', icon: Boxes, roles: ['owner', 'warehouse_manager', 'warehouse_staff', 'salesman'] },
-      { name: 'Inventory', path: '/inventory', icon: Package, roles: ['owner', 'warehouse_manager', 'warehouse_staff'] },
-      { name: 'Procurement', path: '/procurement', icon: Truck, roles: ['owner', 'warehouse_manager'] },
-      { name: 'Deliveries', path: '/deliveries', icon: Box, roles: ['owner', 'sales_admin', 'salesman', 'warehouse_manager', 'warehouse_staff'] },
-      { name: 'Returns', path: '/returns', icon: CheckCircle, roles: ['owner', 'warehouse_manager', 'warehouse_staff'] },
+      { name: 'Categories',         path: '/categories',         icon: Tags,           key: 'categories' },
+      { name: 'Products',            path: '/products',           icon: Boxes,          key: 'products' },
+      { name: 'Inventory',           path: '/inventory',          icon: Package,        key: 'inventory' },
+      { name: 'Procurement',         path: '/procurement',        icon: Truck,          key: 'procurement' },
+      { name: 'Deliveries',          path: '/deliveries',         icon: Box,            key: 'deliveries' },
+      { name: 'Return Collections',  path: '/return-collections', icon: ClipboardList,  key: 'returnCollections' },
+      { name: 'Returns',             path: '/returns',            icon: RefreshCcw,     key: 'returns' },
     ],
   },
   {
     title: 'Finance',
     items: [
-      { name: 'Credit Accounts', path: '/credit-accounts', icon: CreditCard, roles: ['owner', 'sales_admin', 'accounts_manager', 'accounts_executive'] },
-      { name: 'Invoices', path: '/invoices', icon: FileCheck2, roles: ['owner', 'sales_admin', 'accounts_manager', 'accounts_executive'] },
-      { name: 'Payments', path: '/payments', icon: CreditCard, roles: ['owner', 'sales_admin', 'accounts_manager', 'accounts_executive'] },
+      { name: 'Credit Accounts', path: '/credit-accounts', icon: CreditCard,   key: 'creditAccounts' },
+      { name: 'Invoices',        path: '/invoices',        icon: FileCheck2,    key: 'invoices' },
+      { name: 'Payments',        path: '/payments',        icon: Receipt,       key: 'payments' },
     ],
   },
   {
     title: 'Support',
     items: [
-      { name: 'Support Tickets', path: '/support-tickets', icon: LifeBuoy, roles: ['owner', 'support_manager', 'support_staff'] },
+      { name: 'Support Tickets', path: '/support-tickets', icon: LifeBuoy,     key: 'supportTickets' },
     ],
   },
   {
-    title: 'Compliance',
+    title: 'Intelligence',
     items: [
-      { name: 'Compliance', path: '/compliance', icon: ShieldCheck, roles: ['owner', 'compliance_manager'] },
-      { name: 'Reports', path: '/reports', icon: BarChart3, roles: ['owner', 'sales_admin', 'accounts_manager', 'support_manager', 'compliance_manager'] },
+      { name: 'Reports',         path: '/reports',         icon: BarChart3,     key: 'reports' },
+      { name: 'Notifications',   path: '/notifications-center', icon: FileCheck2, key: 'notifications' },
+      { name: 'Compliance',      path: '/compliance',      icon: ShieldCheck,   key: 'compliance' },
+      { name: 'Audit Center',    path: '/audit-center',    icon: FileDigit,     key: 'auditCenter' },
     ],
   },
 ];
@@ -77,20 +94,32 @@ export const Sidebar = ({ isMobileOpen, setMobileOpen }) => {
 
   const content = (
     <div className="flex h-full flex-col bg-[var(--bg-secondary)] text-[var(--text-primary)]">
+      {/* Brand */}
       <div className="flex items-center gap-3 border-b border-[var(--border)] px-5 py-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-3xl bg-[var(--brand)] text-white">GM</div>
+        <div className="flex h-10 w-10 items-center justify-center rounded-3xl bg-[var(--brand)] text-white font-bold text-sm select-none">
+          GM
+        </div>
         <div>
           <p className="text-sm font-semibold">Ganga Maxx</p>
           <p className="text-xs text-[var(--text-secondary)]">Admin CRM</p>
         </div>
       </div>
+
+      {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         {navSections.map((section) => {
-          const visibleItems = section.items.filter((item) => item.roles.includes(user.role));
+          // Filter items by the central MENU_PERMISSIONS matrix
+          const visibleItems = section.items.filter((item) => {
+            const allowed = MENU_PERMISSIONS[item.key];
+            return allowed && allowed.includes(user.role);
+          });
           if (!visibleItems.length) return null;
+
           return (
             <div key={section.title} className="mb-5">
-              <p className="px-2 pb-2 text-[10px] uppercase tracking-[0.24em] text-[var(--text-secondary)]">{section.title}</p>
+              <p className="px-2 pb-2 text-[10px] uppercase tracking-[0.24em] text-[var(--text-secondary)]">
+                {section.title}
+              </p>
               <div className="space-y-1">
                 {visibleItems.map((item) => (
                   <NavLink
@@ -99,11 +128,13 @@ export const Sidebar = ({ isMobileOpen, setMobileOpen }) => {
                     onClick={() => setMobileOpen(false)}
                     className={({ isActive }) =>
                       `flex items-center gap-3 rounded-3xl px-3 py-3 text-sm transition ${
-                        isActive ? 'bg-[var(--brand)] text-white' : 'text-[var(--text-primary)] hover:bg-[var(--bg-base)]'
+                        isActive
+                          ? 'bg-[var(--brand)] text-white'
+                          : 'text-[var(--text-primary)] hover:bg-[var(--bg-base)]'
                       }`
                     }
                   >
-                    <item.icon className="h-4 w-4" />
+                    <item.icon className="h-4 w-4 flex-shrink-0" />
                     {item.name}
                   </NavLink>
                 ))}
@@ -112,8 +143,23 @@ export const Sidebar = ({ isMobileOpen, setMobileOpen }) => {
           );
         })}
       </nav>
-      <div className="border-t border-[var(--border)] p-4">
-        <button type="button" onClick={logout} className="w-full rounded-3xl bg-[var(--danger)] px-4 py-3 text-sm font-semibold text-white">
+
+      {/* User + Sign Out */}
+      <div className="border-t border-[var(--border)] p-4 space-y-3">
+        <div className="flex items-center gap-2 px-2">
+          <div className="h-7 w-7 rounded-full bg-[var(--brand-light)] flex items-center justify-center text-xs font-bold text-[var(--brand)] flex-shrink-0">
+            {(user.name || user.email || '?').charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-[var(--text-primary)] truncate">{user.name}</p>
+            <p className="text-[10px] text-[var(--text-secondary)] truncate">{user.role}</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={logout}
+          className="w-full rounded-3xl bg-[var(--danger)] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-opacity"
+        >
           Sign out
         </button>
       </div>
@@ -122,10 +168,19 @@ export const Sidebar = ({ isMobileOpen, setMobileOpen }) => {
 
   return (
     <>
-      <div className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 lg:left-0 lg:z-20 border-r border-[var(--border)]">{content}</div>
+      {/* Desktop sidebar */}
+      <div className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 lg:left-0 lg:z-20 border-r border-[var(--border)]">
+        {content}
+      </div>
+
+      {/* Mobile sidebar overlay */}
       {isMobileOpen && (
         <div className="fixed inset-0 z-40 flex lg:hidden">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setMobileOpen(false)} aria-hidden="true" />
+          <div
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setMobileOpen(false)}
+            aria-hidden="true"
+          />
           <div className="relative z-50 w-64">{content}</div>
         </div>
       )}

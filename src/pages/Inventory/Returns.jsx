@@ -6,11 +6,12 @@ import { PageHeader, Card, Button, Input, Select, Badge, Modal, EmptyState, Text
 import { Undo2, Plus, Pencil } from 'lucide-react';
 
 const RETURN_STATUSES = [
-  { value: 'requested', label: 'Requested' },
-  { value: 'approved', label: 'Approved' },
-  { value: 'received', label: 'Received' },
-  { value: 'refunded', label: 'Refunded' },
-  { value: 'rejected', label: 'Rejected' },
+  { value: 'Requested', label: 'Requested' },
+  { value: 'Approved', label: 'Approved' },
+  { value: 'Rejected', label: 'Rejected' },
+  { value: 'Collected', label: 'Collected' },
+  { value: 'Verified', label: 'Verified' },
+  { value: 'Closed', label: 'Closed' },
 ];
 
 const REASONS = [
@@ -22,7 +23,7 @@ const REASONS = [
   { value: 'other', label: 'Other' },
 ];
 
-const emptyForm = { orderNumber: '', institutionName: '', productName: '', quantity: 1, reason: 'defective', status: 'requested', notes: '' };
+const emptyForm = { orderNumber: '', institutionName: '', productName: '', quantity: 1, reason: 'defective', status: 'Requested', notes: '', productCondition: '' };
 
 export default function Returns() {
   const { user } = useAuth();
@@ -32,19 +33,32 @@ export default function Returns() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [search, setSearch] = useState('');
+  const [actionRemark, setActionRemark] = useState('');
+  const [remarkError, setRemarkError] = useState('');
 
   const openAdd = () => { setEditing(null); setForm(emptyForm); setModalOpen(true); };
   const openEdit = (ret) => {
     setEditing(ret);
-    setForm({ orderNumber: ret.orderNumber || '', institutionName: ret.institutionName || '', productName: ret.productName || '', quantity: ret.quantity || 1, reason: ret.reason || 'defective', status: ret.status || 'requested', notes: ret.notes || '' });
+    setForm({ orderNumber: ret.orderNumber || '', institutionName: ret.institutionName || '', productName: ret.productName || '', quantity: ret.quantity || 1, reason: ret.reason || 'defective', status: ret.status || 'Requested', notes: ret.notes || '', productCondition: ret.productCondition || '' });
     setModalOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = (newStatus = null) => {
     if (!form.orderNumber || !form.productName) return;
+    setRemarkError('');
+
+    if (newStatus === 'Approved' || newStatus === 'Rejected' || newStatus === 'Verified' || newStatus === 'Closed') {
+      if (!actionRemark.trim()) {
+        setRemarkError(`Mandatory remark required for this action.`);
+        return;
+      }
+    }
+    
     const returnNumber = `RET-${Date.now().toString().slice(-6)}`;
+    const finalStatus = newStatus || form.status;
+
     if (editing) {
-      db.updateReturn(editing.id, form);
+      db.updateReturn(editing.id, { ...form, status: finalStatus });
       logAuditAction(
         user.id,
         user.email,
@@ -52,10 +66,25 @@ export default function Returns() {
         'update_return',
         'return',
         editing.id,
-        `Updated return request ${editing.returnNumber || editing.id} status to ${form.status}`
+        `Updated return request ${editing.returnNumber || editing.id} status to ${finalStatus}. Remark: ${actionRemark}`
       );
     } else {
-      db.addReturn({ ...form, returnNumber, createdBy: user?.name || user?.email || '' });
+      const returnHistory = [{
+        state: form.status || 'Requested',
+        timestamp: new Date().toISOString(),
+        actorId: user?.id || 'unknown',
+        actorEmail: user?.email || 'unknown',
+        actorRole: user?.role || 'Salesman',
+        remark: 'Return request created via CRM'
+      }];
+
+      db.addReturn({ 
+        ...form, 
+        returnNumber, 
+        createdBy: user?.name || user?.email || '',
+        history: returnHistory,
+        remarks: 'Initial return request'
+      });
       logAuditAction(
         user.id,
         user.email,
@@ -111,7 +140,12 @@ export default function Returns() {
                     <td className="px-5 py-3"><Badge type="default" text={r.reason?.replace(/_/g, ' ')} /></td>
                     <td className="px-5 py-3"><Badge type={r.status} /></td>
                     <td className="px-5 py-3 text-[var(--text-secondary)]">{r.createdAt}</td>
-                    <td className="px-5 py-3 text-right"><Button variant="outline" size="xs" icon={Pencil} onClick={() => openEdit(r)}>Edit</Button></td>
+                    <td className="px-5 py-3 text-right">
+                      <Button variant="outline" size="xs" icon={Pencil} onClick={() => { setActionRemark(''); openEdit(r); }}>
+                        {r.status === 'Requested' && user?.role === 'Salesman' ? 'Review Return Request' : 
+                         (r.status === 'Approved' || r.status === 'Collected') && user?.role === 'Warehouse Executive' ? 'Verify Return' : 'Edit'}
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -131,11 +165,50 @@ export default function Returns() {
             <Input label="Quantity" type="number" min="1" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} />
             <Select label="Reason" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} options={REASONS} />
           </div>
-          <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} options={RETURN_STATUSES} />
-          <Textarea label="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Return details…" />
+          <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} options={RETURN_STATUSES} disabled />
+          <Textarea label="Return Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Additional return notes…" />
+          
+          {editing && form.status === 'Requested' && user?.role === 'Salesman' && (
+            <div className="flex flex-col gap-2 border-t border-[var(--border)] pt-4 mt-2">
+              <label className="text-sm font-semibold text-[var(--text-primary)]">Approval Remark (Mandatory for Approve/Reject)</label>
+              <Textarea 
+                placeholder="Reason for decision..." 
+                value={actionRemark} 
+                onChange={e => setActionRemark(e.target.value)} 
+              />
+              {remarkError && <p className="text-xs text-rose-500 mt-1">{remarkError}</p>}
+            </div>
+          )}
+
+          {editing && (form.status === 'Approved' || form.status === 'Collected') && user?.role === 'Warehouse Executive' && (
+            <div className="flex flex-col gap-2 border-t border-[var(--border)] pt-4 mt-2">
+              <Input label="Mark Product Condition" value={form.productCondition} onChange={(e) => setForm({ ...form, productCondition: e.target.value })} placeholder="e.g. Damaged, Intact, Used" />
+              <label className="text-sm font-semibold text-[var(--text-primary)]">Verification Remark (Mandatory for Accept/Reject)</label>
+              <Textarea 
+                placeholder="Reason for verification decision..." 
+                value={actionRemark} 
+                onChange={e => setActionRemark(e.target.value)} 
+              />
+              {remarkError && <p className="text-xs text-rose-500 mt-1">{remarkError}</p>}
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave}>{editing ? 'Save Changes' : 'Submit Return'}</Button>
+            {editing && form.status === 'Requested' && user?.role === 'Salesman' ? (
+              <>
+                <Button variant="danger" onClick={() => handleSave('Rejected')}>Reject Return Request</Button>
+                <Button variant="secondary" onClick={() => handleSave('Requested')}>Request Additional Information</Button>
+                <Button variant="primary" onClick={() => handleSave('Approved')}>Approve Return Request</Button>
+              </>
+            ) : editing && (form.status === 'Approved' || form.status === 'Collected') && user?.role === 'Warehouse Executive' ? (
+              <>
+                <Button variant="danger" onClick={() => handleSave('Rejected')}>Reject Return</Button>
+                <Button variant="primary" onClick={() => handleSave('Closed')}>Verify & Close Return</Button>
+              </>
+            ) : (
+              <Button onClick={() => handleSave()}>{editing ? 'Save Changes' : 'Log Return'}</Button>
+            )}
           </div>
         </div>
       </Modal>

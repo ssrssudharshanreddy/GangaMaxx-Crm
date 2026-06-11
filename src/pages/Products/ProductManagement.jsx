@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useCollection } from '../../hooks/useDb';
 import { useAuth } from '../../context/AuthContext';
-import { db, logAuditAction } from '../../services';
+import { db } from '../../services';
 import { PageHeader, Card, Button, Input, Select, Badge, Modal, EmptyState, Textarea } from '../../components/ui/ui-components';
 import { Package, Plus, Pencil } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { ROLES } from '../../config/permissions';
 
 const CATEGORIES = [
   { value: 'cleaning_chemicals', label: 'Cleaning Chemicals' },
@@ -29,24 +31,37 @@ export default function ProductManagement() {
   const [form, setForm] = useState(emptyForm);
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('');
+  const [remark, setRemark] = useState('');
 
-  const openAdd = () => { setEditing(null); setForm(emptyForm); setModalOpen(true); };
+  // Warehouse Executive can create/edit products. Super Admin is purely governance.
+  const isAuthorizedWriter = user.role === ROLES.WAREHOUSE_EXECUTIVE;
+
+  const openAdd = () => { setEditing(null); setForm(emptyForm); setRemark(''); setModalOpen(true); };
   const openEdit = (p) => {
     setEditing(p);
     setForm({ name: p.name || '', sku: p.sku || '', category: p.category || 'cleaning_chemicals', description: p.description || '', basePrice: p.basePrice || 0, stockLevel: p.stockLevel || 0, reorderPoint: p.reorderPoint || 10, status: p.status || 'active' });
+    setRemark('');
     setModalOpen(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.name || !form.sku) return;
-    if (editing) {
-      db.updateProduct(editing.id, form);
-      logAuditAction(user.id, user.email, user.role, 'update_product', 'product', editing.id, `Updated ${form.name}`);
-    } else {
-      const created = db.addProduct(form);
-      logAuditAction(user.id, user.email, user.role, 'create_product', 'product', created.id, `Created ${form.name}`);
+    try {
+      if (editing) {
+        if (!remark || remark.trim().length < 5) {
+          toast.error('A remark of at least 5 characters is required for product modifications.');
+          return;
+        }
+        await db.updateProduct(editing.id, form, user, remark);
+        toast.success('Product updated successfully.');
+      } else {
+        await db.addProduct(form);
+        toast.success('Product added successfully.');
+      }
+      setModalOpen(false);
+    } catch (err) {
+      toast.error(err.message);
     }
-    setModalOpen(false);
   };
 
   const filtered = products.filter((p) => {
@@ -57,7 +72,11 @@ export default function ProductManagement() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Product Catalog" subtitle="Manage inventory SKUs, pricing, and stock levels." actions={<Button icon={Plus} onClick={openAdd}>Add Product</Button>} />
+      <PageHeader 
+        title="Product Catalog" 
+        subtitle="Manage inventory SKUs, pricing, and stock levels." 
+        actions={isAuthorizedWriter && <Button icon={Plus} onClick={openAdd}>Add Product</Button>} 
+      />
 
       <div className="flex flex-wrap gap-3">
         <Input placeholder="Search by name or SKU…" value={search} onChange={(e) => setSearch(e.target.value)} className="flex-1 min-w-[200px]" />
@@ -65,7 +84,12 @@ export default function ProductManagement() {
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={Package} title="No products found" description="Add your first product to the catalog." actionButton={<Button icon={Plus} onClick={openAdd}>Add Product</Button>} />
+        <EmptyState 
+          icon={Package} 
+          title="No products found" 
+          description="Add your first product to the catalog." 
+          actionButton={isAuthorizedWriter && <Button icon={Plus} onClick={openAdd}>Add Product</Button>} 
+        />
       ) : (
         <Card noPadding>
           <div className="overflow-x-auto">
@@ -90,7 +114,13 @@ export default function ProductManagement() {
                     <td className="px-5 py-3 text-right text-[var(--text-primary)]">₹{Number(p.basePrice || 0).toLocaleString('en-IN')}</td>
                     <td className={`px-5 py-3 text-right font-semibold ${(p.stockLevel || 0) <= (p.reorderPoint || 0) ? 'text-[var(--danger)]' : 'text-[var(--text-primary)]'}`}>{p.stockLevel || 0}</td>
                     <td className="px-5 py-3"><Badge type={p.status} /></td>
-                    <td className="px-5 py-3 text-right"><Button variant="outline" size="xs" icon={Pencil} onClick={() => openEdit(p)}>Edit</Button></td>
+                    <td className="px-5 py-3 text-right">
+                      {isAuthorizedWriter ? (
+                        <Button variant="outline" size="xs" icon={Pencil} onClick={() => openEdit(p)}>Edit</Button>
+                      ) : (
+                        <span className="text-xs text-[var(--text-tertiary)]">Read Only</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -113,6 +143,19 @@ export default function ProductManagement() {
             <Input label="Reorder Point" type="number" min="0" value={form.reorderPoint} onChange={(e) => setForm({ ...form, reorderPoint: Number(e.target.value) })} />
           </div>
           <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} options={STATUSES} />
+          
+          {editing && (
+            <div className="border-t border-[var(--border)] pt-4 mt-2">
+              <Input 
+                label="Modification Remark" 
+                required 
+                value={remark} 
+                onChange={(e) => setRemark(e.target.value)} 
+                placeholder="Reason for change (min 5 chars)" 
+              />
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
             <Button onClick={handleSave}>{editing ? 'Save Changes' : 'Create Product'}</Button>

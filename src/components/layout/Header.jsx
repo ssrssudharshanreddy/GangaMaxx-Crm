@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications, useCollection } from '../../hooks/useDb';
 import { Menu, Bell, X, Search } from 'lucide-react';
@@ -24,6 +24,7 @@ const pageTitles = {
   '/support-tickets': 'Support Tickets',
   '/compliance': 'Compliance',
   '/reports': 'Reports',
+  '/notifications-center': 'Notifications Center',
 };
 
 const GlobalSearch = () => {
@@ -158,6 +159,11 @@ export const Header = ({ setMobileOpen }) => {
                       <p className="mt-1 text-xs text-[var(--text-secondary)]">{notification.body}</p>
                     </li>
                   ))}
+                  <li className="pt-2 text-center">
+                    <Link to="/notifications-center" onClick={() => setMenuOpen(false)} className="text-sm text-[var(--brand)] font-medium hover:underline">
+                      View all notifications
+                    </Link>
+                  </li>
                 </ul>
               )}
             </div>

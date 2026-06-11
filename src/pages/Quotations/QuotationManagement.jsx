@@ -27,6 +27,9 @@ export default function QuotationManagement() {
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [discountError, setDiscountError] = useState('');
+  const [actionRemark, setActionRemark] = useState('');
+  const [remarkError, setRemarkError] = useState('');
 
   const emptyForm = { institutionName: '', items: [{ productName: '', quantity: 1, unitPrice: 0 }], status: 'draft', validUntil: '', notes: '' };
   const [form, setForm] = useState(emptyForm);
@@ -53,19 +56,72 @@ export default function QuotationManagement() {
   const addItem = () => setForm({ ...form, items: [...form.items, { productName: '', quantity: 1, unitPrice: 0 }] });
   const removeItem = (idx) => setForm({ ...form, items: form.items.filter((_, i) => i !== idx) });
 
-  const handleSave = () => {
+  const handleSave = (newStatus = null) => {
     if (!form.institutionName) return;
+    setDiscountError('');
+    setRemarkError('');
+    
+    // Check if revision requires remark
+    if (editing && editing.status !== 'draft' && newStatus === 'sent') {
+      if (!actionRemark.trim()) {
+        setRemarkError('Mandatory remark required for quotation revision.');
+        return;
+      }
+    }
+    
+    if (user?.role === 'Salesman') {
+      for (const item of form.items) {
+        const p = products.find(prod => prod.name === item.productName);
+        if (p && p.basePrice) {
+          const discountPercent = ((p.basePrice - item.unitPrice) / p.basePrice) * 100;
+          if (discountPercent > 10) {
+            setDiscountError(`Cannot offer more than 10% discount on ${item.productName}. Approval from Sales Executive required.`);
+            return;
+          }
+        }
+      }
+    }
+
     const total = form.items.reduce((s, i) => s + (i.quantity * i.unitPrice), 0);
     const quotationNumber = `QT-${Date.now().toString().slice(-6)}`;
     const selectedInst = institutions.find(i => i.name === form.institutionName);
     const institutionId = selectedInst ? selectedInst.id : '';
 
     if (editing) {
-      db.updateQuotation(editing.id, { ...form, institutionId, total });
+      db.updateQuotation(editing.id, { 
+        ...form, 
+        institutionId, 
+        total,
+        status: newStatus || form.status
+      });
+      if (actionRemark.trim()) {
+        logAuditAction(user, 'quotation_revision', `Revised quotation ${editing.quotationNumber}. Remark: ${actionRemark}`);
+      }
     } else {
-      db.addQuotation({ ...form, institutionId, quotationNumber, total, createdBy: user?.name || user?.email || '' });
+      const quotationHistory = [{
+        state: form.status || 'draft',
+        timestamp: new Date().toISOString(),
+        actorId: user?.id || 'unknown',
+        actorEmail: user?.email || 'unknown',
+        actorRole: user?.role || 'Sales Executive',
+        remark: 'Quotation created via CRM'
+      }];
+
+      db.addQuotation({ 
+        ...form, 
+        institutionId, 
+        quotationNumber, 
+        total, 
+        createdBy: user?.name || user?.email || '',
+        history: quotationHistory,
+        remarks: 'Initial quotation drafted'
+      });
+      if (newStatus === 'sent') {
+         logAuditAction(user, 'quotation_sent', `Sent new quotation`);
+      }
     }
     setModalOpen(false);
+    setActionRemark('');
   };
 
   const handleConvertToOrder = async (quotation) => {
@@ -161,7 +217,11 @@ export default function QuotationManagement() {
                     <td className="px-5 py-3 text-[var(--text-secondary)]">{q.createdAt}</td>
                     <td className="px-5 py-3 text-right flex gap-1 justify-end">
                       <Button variant="outline" size="xs" icon={Eye} onClick={() => setDetailModal(q)}>View</Button>
-                      <Button variant="outline" size="xs" icon={Pencil} onClick={() => openEdit(q)}>Edit</Button>
+                      {(q.status === 'draft' || q.status === 'sent' || q.status === 'rejected') && (
+                         <Button variant="outline" size="xs" icon={Pencil} onClick={() => { setActionRemark(''); openEdit(q); }}>
+                           {q.status === 'draft' ? 'Edit Draft Quotation' : 'Revise Quotation'}
+                         </Button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -243,12 +303,36 @@ export default function QuotationManagement() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <Input label="Valid Until" type="date" value={form.validUntil} onChange={(e) => setForm({ ...form, validUntil: e.target.value })} />
-            <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} options={STATUSES} />
+            {/* Status is now handled by actions */}
           </div>
           <Textarea label="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Additional notes…" />
+          
+          {editing && editing.status !== 'draft' && (
+            <div className="flex flex-col gap-2 border-t border-[var(--border)] pt-4 mt-2">
+              <label className="text-sm font-semibold text-[var(--text-primary)]">Revision Remark (Mandatory)</label>
+              <Textarea 
+                placeholder="Reason for revision..." 
+                value={actionRemark} 
+                onChange={e => setActionRemark(e.target.value)} 
+              />
+              {remarkError && <p className="text-xs text-rose-500 mt-1">{remarkError}</p>}
+            </div>
+          )}
+          
+          {discountError && (
+            <div className="p-3 text-xs bg-rose-50 border border-rose-200 text-rose-700 rounded-lg flex items-center gap-2">
+              <span className="font-semibold">⚠️ Discount Threshold Exceeded:</span>
+              <span>{discountError}</span>
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave}>{editing ? 'Save Changes' : 'Create Quotation'}</Button>
+            {editing && editing.status === 'draft' && (
+              <Button variant="danger" onClick={() => { db.updateQuotation(editing.id, { status: 'cancelled' }); setModalOpen(false); }}>Cancel Draft Quotation</Button>
+            )}
+            <Button variant="secondary" onClick={() => handleSave('draft')}>Save Draft</Button>
+            <Button onClick={() => handleSave('sent')}>{editing && editing.status !== 'draft' ? 'Revise Quotation' : 'Send Quotation'}</Button>
           </div>
         </div>
       </Modal>

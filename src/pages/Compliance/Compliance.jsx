@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useCollection } from '../../hooks/useDb';
-import { PageHeader, Card, Button, Input, Badge, EmptyState, SectionCard } from '../../components/ui/ui-components';
+import { PageHeader, Card, Button, Input, Badge, EmptyState, SectionCard, Modal } from '../../components/ui/ui-components';
 import { ShieldCheck, Search } from 'lucide-react';
 
 export default function Compliance() {
@@ -8,6 +8,7 @@ export default function Compliance() {
   const institutions = useCollection('institutions');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+  const [selectedAudit, setSelectedAudit] = useState(null);
 
   // Compliance checks: verify institutions have required fields
   const complianceChecks = useMemo(() => {
@@ -95,7 +96,7 @@ export default function Compliance() {
       </SectionCard>
 
       {/* Audit Log Section */}
-      <SectionCard title="Audit Log" subtitle="Recent system-wide audit trail" noPadding>
+      <SectionCard title="Audit Log" subtitle="Recent system-wide audit trail (Click Inspect to view details & remarks)" noPadding>
         {filteredAudits.length === 0 ? (
           <div className="p-5">
             <EmptyState icon={ShieldCheck} title="No audit entries" description="Audit logs will appear here as actions are taken in the system." />
@@ -110,7 +111,8 @@ export default function Compliance() {
                   <th className="px-5 py-3">Role</th>
                   <th className="px-5 py-3">Action</th>
                   <th className="px-5 py-3">Entity</th>
-                  <th className="px-5 py-3">Details</th>
+                  <th className="px-5 py-3">Remark</th>
+                  <th className="px-5 py-3 text-right">Inspect</th>
                 </tr>
               </thead>
               <tbody>
@@ -121,10 +123,13 @@ export default function Compliance() {
                     <td className="px-5 py-3"><Badge type="default" text={a.actorRole?.replace(/_/g, ' ')} /></td>
                     <td className="px-5 py-3 text-[var(--text-primary)] font-medium">{a.action?.replace(/_/g, ' ')}</td>
                     <td className="px-5 py-3 text-[var(--text-secondary)]">{a.entityType} #{a.entityId}</td>
-                    <td className="px-5 py-3 text-[var(--text-secondary)] max-w-[200px] truncate">
-                      {typeof a.details === 'object' && a.details !== null
-                        ? Object.entries(a.details).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(', ')
-                        : String(a.details || '')}
+                    <td className="px-5 py-3 text-[var(--text-secondary)] truncate max-w-[150px]">{a.remark || '—'}</td>
+                    <td className="px-5 py-3 text-right">
+                      {(a.payloadDiff || a.remark) ? (
+                        <Button variant="outline" size="xs" onClick={() => setSelectedAudit(a)}>Inspect</Button>
+                      ) : (
+                        <span className="text-xs text-[var(--text-tertiary)]">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -133,6 +138,42 @@ export default function Compliance() {
           </div>
         )}
       </SectionCard>
+
+      <Modal open={!!selectedAudit} title="Audit Payload Diff Inspector" onClose={() => setSelectedAudit(null)}>
+        {selectedAudit && (
+          <div className="flex flex-col gap-4 text-sm">
+            <div>
+              <p className="font-semibold text-[var(--text-primary)]">Action</p>
+              <p className="text-[var(--text-secondary)]">{selectedAudit.action}</p>
+            </div>
+            <div>
+              <p className="font-semibold text-[var(--text-primary)]">Remark / Reason</p>
+              <p className="text-[var(--text-secondary)] bg-[var(--bg-secondary)] p-3 rounded-lg border border-[var(--border)] italic mt-1">
+                {selectedAudit.remark || 'No remark was provided for this event.'}
+              </p>
+            </div>
+            {selectedAudit.payloadDiff && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="font-semibold text-[var(--text-primary)] mb-2">Before Payload</p>
+                  <pre className="bg-[var(--bg-secondary)] p-3 rounded-lg border border-[var(--border)] overflow-auto text-xs max-h-60">
+                    {JSON.stringify(selectedAudit.payloadDiff.before, null, 2)}
+                  </pre>
+                </div>
+                <div>
+                  <p className="font-semibold text-[var(--text-primary)] mb-2">After Payload</p>
+                  <pre className="bg-[var(--bg-secondary)] p-3 rounded-lg border border-[var(--border)] overflow-auto text-xs max-h-60">
+                    {JSON.stringify(selectedAudit.payloadDiff.after, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end pt-2">
+              <Button onClick={() => setSelectedAudit(null)}>Close Inspector</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

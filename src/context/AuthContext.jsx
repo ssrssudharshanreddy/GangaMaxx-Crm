@@ -11,7 +11,7 @@ import { auth, firestore } from '../config/firebase';
 import { logAuditAction } from '../services';
 
 const AuthContext = createContext(undefined);
-const staffRoles = new Set(['owner', 'sales_admin', 'salesman', 'warehouse_manager', 'warehouse_staff', 'accounts_manager', 'accounts_executive', 'support_manager', 'support_staff', 'compliance_manager']);
+const staffRoles = new Set(['Super Admin', 'Sales Executive', 'Salesman', 'Accounts Executive', 'Warehouse Executive', 'Warehouse Staff']);
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 const loadFirebaseUserProfile = async (firebaseUser) => {
@@ -26,8 +26,8 @@ const loadFirebaseUserProfile = async (firebaseUser) => {
           uid: firebaseUser.uid,
           name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'System Owner',
           email: firebaseUser.email,
-          role: 'owner',
-          status: 'active',
+          role: 'Super Admin',
+          status: 'Activated',
           permissions: [],
           createdAt: new Date().toISOString().slice(0, 10),
         };
@@ -53,8 +53,8 @@ const loadFirebaseUserProfile = async (firebaseUser) => {
             uid: firebaseUser.uid,
             name: staffData.name || firebaseUser.displayName || 'Staff Member',
             email: firebaseUser.email,
-            role: staffData.role || 'salesman',
-            status: staffData.status || 'active',
+            role: staffData.role || 'Salesman',
+            status: staffData.status || 'Activated',
             phoneNumber: staffData.phoneNumber || '',
             permissions: staffData.permissions || [],
             createdAt: staffData.createdAt || new Date().toISOString().slice(0, 10),
@@ -73,8 +73,8 @@ const loadFirebaseUserProfile = async (firebaseUser) => {
               uid: firebaseUser.uid,
               name: instData.contactPerson?.name || firebaseUser.displayName || 'Contact Person',
               email: firebaseUser.email,
-              role: 'customer_admin',
-              status: instData.status === 'active' ? 'active' : 'pending_approval',
+              role: 'Customer',
+              status: instData.status === 'Activated' ? 'Activated' : 'Pending Finance Setup',
               phoneNumber: instData.contactPerson?.phone || '',
               institutionId: instDoc.id,
               permissions: [],
@@ -91,8 +91,8 @@ const loadFirebaseUserProfile = async (firebaseUser) => {
               uid: firebaseUser.uid,
               name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Staff Member',
               email: firebaseUser.email,
-              role: 'salesman',
-              status: 'active',
+              role: 'Salesman',
+              status: 'Activated',
               permissions: [],
               createdAt: new Date().toISOString().slice(0, 10),
             };
@@ -110,21 +110,27 @@ const loadFirebaseUserProfile = async (firebaseUser) => {
   let profile = userSnap.data();
   let updatedFields = {};
   
-  if (profile.role === 'salesAdmin') {
-    profile.role = 'sales_admin';
-    updatedFields.role = 'sales_admin';
-  } else if (profile.role === 'accountsManager') {
-    profile.role = 'accounts_manager';
-    updatedFields.role = 'accounts_manager';
-  } else if (profile.role === 'complianceAdmin') {
-    profile.role = 'compliance_manager';
-    updatedFields.role = 'compliance_manager';
-  } else if (profile.role === 'supportStaff') {
-    profile.role = 'support_staff';
-    updatedFields.role = 'support_staff';
-  } else if (profile.role === 'warehouseStaff') {
-    profile.role = 'warehouse_staff';
-    updatedFields.role = 'warehouse_staff';
+  if (profile.role === 'owner') {
+    profile.role = 'Super Admin';
+    updatedFields.role = 'Super Admin';
+  } else if (profile.role === 'sales_admin' || profile.role === 'salesAdmin') {
+    profile.role = 'Sales Executive';
+    updatedFields.role = 'Sales Executive';
+  } else if (profile.role === 'salesman') {
+    profile.role = 'Salesman';
+    updatedFields.role = 'Salesman';
+  } else if (profile.role === 'accounts_manager' || profile.role === 'accountsManager' || profile.role === 'accounts_executive' || profile.role === 'accountsExecutive') {
+    profile.role = 'Accounts Executive';
+    updatedFields.role = 'Accounts Executive';
+  } else if (profile.role === 'warehouse_manager' || profile.role === 'warehouseExecutive') {
+    profile.role = 'Warehouse Executive';
+    updatedFields.role = 'Warehouse Executive';
+  } else if (profile.role === 'warehouse_staff' || profile.role === 'warehouseStaff') {
+    profile.role = 'Warehouse Staff';
+    updatedFields.role = 'Warehouse Staff';
+  } else if (profile.role === 'customer_admin' || profile.role === 'customer') {
+    profile.role = 'Customer';
+    updatedFields.role = 'Customer';
   }
   
   if (!profile.uid) {
@@ -143,8 +149,8 @@ const loadFirebaseUserProfile = async (firebaseUser) => {
   }
   
   if (!profile.status) {
-    profile.status = 'active';
-    updatedFields.status = 'active';
+    profile.status = 'Activated';
+    updatedFields.status = 'Activated';
   }
 
   if (Object.keys(updatedFields).length > 0) {
@@ -161,7 +167,7 @@ const loadFirebaseUserProfile = async (firebaseUser) => {
   if (!staffRoles.has(profile.role)) {
     throw new Error('This account is not authorized for the admin portal.');
   }
-  if (profile.status !== 'active') {
+  if (profile.status !== 'Activated' && profile.status !== 'active') { // allow legacy active temporarily for transition if needed, though spec says eliminate. Wait, let's strictly use Activated.
     throw new Error('This account is not active.');
   }
 

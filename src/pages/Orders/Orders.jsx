@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { db } from '../../services';
 import { PageHeader, Card, Button, Input, Select, Badge, Modal, EmptyState, Textarea } from '../../components/ui/ui-components';
 import { ShoppingCart, Plus, Pencil, Eye, Download } from 'lucide-react';
+import { ROLES } from '../../config/permissions';
 
 const exportToCSV = (data, filename) => {
   const headers = ['Order #', 'Institution', 'Date', 'Items', 'Total (INR)', 'Payment Mode', 'Status'];
@@ -27,12 +28,13 @@ const exportToCSV = (data, filename) => {
 };
 
 const ORDER_STATUSES = [
-  { value: 'pending', label: 'Pending' },
-  { value: 'confirmed', label: 'Confirmed' },
-  { value: 'processing', label: 'Processing' },
-  { value: 'dispatched', label: 'Dispatched' },
-  { value: 'delivered', label: 'Delivered' },
-  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'Created', label: 'Created' },
+  { value: 'Confirmed', label: 'Confirmed' },
+  { value: 'Assigned', label: 'Assigned' },
+  { value: 'Packed', label: 'Packed' },
+  { value: 'Dispatched', label: 'Dispatched' },
+  { value: 'Delivered', label: 'Delivered' },
+  { value: 'Cancelled', label: 'Cancelled' },
 ];
 
 const PAYMENT_MODES = [
@@ -48,7 +50,7 @@ export default function Orders() {
   const allOrders = useCollection('orders');
   const orders = useMemo(() => {
     if (!user) return allOrders;
-    if (user.role === 'salesman') {
+    if (user.role === ROLES.SALESMAN) {
       return allOrders.filter(o => o.salesmanId === user.id || o.salesmanEmail === user.email);
     }
     return allOrders;
@@ -67,19 +69,21 @@ export default function Orders() {
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 20;
 
-  const emptyForm = { institutionName: '', items: [{ productName: '', quantity: 1, unitPrice: 0 }], paymentMode: 'credit', status: 'pending', notes: '' };
+  const emptyForm = { institutionName: '', items: [{ productName: '', quantity: 1, unitPrice: 0 }], paymentMode: 'credit', status: 'Created', notes: '' };
   const [form, setForm] = useState(emptyForm);
+  const [deliveryData, setDeliveryData] = useState({ signature: '', coordinates: '' });
 
-  const openAdd = () => { setEditing(null); setForm(emptyForm); setModalOpen(true); };
+  const openAdd = () => { setEditing(null); setForm(emptyForm); setDeliveryData({ signature: '', coordinates: '' }); setModalOpen(true); };
   const openEdit = (order) => {
     setEditing(order);
     setForm({
       institutionName: order.institutionName || '',
       items: order.items?.length ? order.items : [{ productName: '', quantity: 1, unitPrice: 0 }],
       paymentMode: order.paymentMode || 'credit',
-      status: order.status || 'pending',
+      status: order.status || 'Created',
       notes: order.notes || '',
     });
+    setDeliveryData({ signature: order.deliverySignature || '', coordinates: order.deliveryCoordinates || '' });
     setModalOpen(true);
   };
 
@@ -116,57 +120,117 @@ export default function Orders() {
   }, [form.institutionName, form.paymentMode, orderTotal, institutions, invoices, payments]);
 
   const getAllowedStatuses = () => {
-    if (user?.role === 'owner' || user?.role === 'sales_admin') return ORDER_STATUSES;
-    if (user?.role === 'warehouse_staff') {
-      return ORDER_STATUSES.filter(s => ['processing', 'dispatched', 'delivered'].includes(s.value));
+    if (user?.role === ROLES.SUPER_ADMIN) return []; // Super Admin cannot process orders
+    if (user?.role === ROLES.SALES_EXECUTIVE) {
+      return ORDER_STATUSES.filter(s => ['Created', 'Confirmed', 'Cancelled'].includes(s.value));
     }
-    if (user?.role === 'accounts_manager') {
-      return ORDER_STATUSES.filter(s => ['confirmed', 'processing'].includes(s.value));
+    if (user?.role === ROLES.WAREHOUSE_STAFF || user?.role === ROLES.WAREHOUSE_EXECUTIVE) {
+      return ORDER_STATUSES.filter(s => ['Assigned', 'Packed', 'Dispatched', 'Delivered'].includes(s.value));
     }
-    return ORDER_STATUSES.filter(s => ['pending', 'cancelled'].includes(s.value));
+    if (user?.role === ROLES.ACCOUNTS_EXECUTIVE) {
+      return ORDER_STATUSES.filter(s => ['Confirmed', 'Assigned'].includes(s.value));
+    }
+    return ORDER_STATUSES.filter(s => ['Created', 'Cancelled'].includes(s.value));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.institutionName || form.items.length === 0) return;
     setCreditError('');
     if (form.paymentMode === 'credit' && creditCheck.overLimit) {
-      setCreditError("This order exceeds the institution's credit limit. Submission blocked.");
-      return;
+      if (user?.role !== ROLES.ACCOUNTS_EXECUTIVE) {
+        setCreditError("This order exceeds the institution's credit limit. Submission blocked.");
+        return;
+      }
     }
     const total = form.items.reduce((s, i) => s + (i.quantity * i.unitPrice), 0);
     const selectedInst = institutions.find(i => i.name === form.institutionName);
     const institutionId = selectedInst ? selectedInst.id : '';
+    
+    const isCreditOverride = form.paymentMode === 'credit' && creditCheck.overLimit && user?.role === ROLES.ACCOUNTS_EXECUTIVE;
 
-    if (editing) {
-      if (editing.status !== form.status) {
-        // Log audit
-        db.logAuditAction(
-          user.id, user.email, user.role,
-          'ORDER_STATUS_CHANGED',
-          'order',
-          editing.id,
-          { from: editing.status, to: form.status, orderNumber: editing.orderNumber }
-        );
-
-        // Push notification to customer
-        const institution = institutions.find(i => i.id === editing.institutionId || i.name === editing.institutionName);
-        if (institution?.contactPerson?.uid) {
-          db.addNotification({
-            recipientId: institution.contactPerson.uid,
-            type: 'order_status',
-            title: `Order ${editing.orderNumber || editing.id} updated`,
-            body: `Your order status changed from ${editing.status} to ${form.status}.`,
-            orderId: editing.id,
-            read: false,
-          });
-        }
+    if (form.status === 'Delivered') {
+      if (!deliveryData.signature || !deliveryData.coordinates) {
+        toast.error('Delivery signature and coordinates are required to mark as delivered.');
+        return;
       }
-      db.updateOrder(editing.id, { ...form, institutionId, total, _changedBy: user?.email || user?.id });
-    } else {
-      db.addOrder({ ...form, institutionId, total, createdBy: user?.name || user?.email || '' });
+      if (!deliveryData.deliveryPin || deliveryData.deliveryPin.trim().length !== 6) {
+        toast.error('A valid 6-digit Delivery PIN is required.');
+        return;
+      }
     }
-    setModalOpen(false);
+
+    setSaveLoading(true);
+    try {
+      if (editing) {
+        if (form.status === 'Delivered' && editing.status !== 'Delivered') {
+          await db.deliverOrder(editing.id, {
+            deliveryPin: deliveryData.deliveryPin,
+            signature: deliveryData.signature,
+            coordinates: deliveryData.coordinates,
+          });
+          toast.success('Order delivered and PIN verified successfully.');
+        } else {
+          // Log audit
+          if (editing.status !== form.status) {
+            db.logAuditAction(
+              user.id, user.email, user.role,
+              'ORDER_STATUS_CHANGED',
+              'order',
+              editing.id,
+              { from: editing.status, to: form.status, orderNumber: editing.orderNumber }
+            );
+
+            // Push notification
+            const institution = institutions.find(i => i.id === editing.institutionId || i.name === editing.institutionName);
+            if (institution?.contactPerson?.uid) {
+              db.addNotification({
+                recipientId: institution.contactPerson.uid,
+                type: 'order_status',
+                title: `Order ${editing.orderNumber || editing.id} updated`,
+                body: `Your order status changed from ${editing.status} to ${form.status}.`,
+                orderId: editing.id,
+                read: false,
+              });
+            }
+          }
+          await db.updateOrder(editing.id, { 
+            ...form, 
+            institutionId, 
+            total, 
+            _changedBy: user?.email || user?.id,
+            creditOverride: isCreditOverride ? true : (editing.creditOverride || false)
+          });
+          toast.success('Order updated.');
+        }
+      } else {
+        const orderHistory = [{
+          state: form.status || 'Created',
+          timestamp: new Date().toISOString(),
+          actorId: user?.id || 'unknown',
+          actorEmail: user?.email || 'unknown',
+          actorRole: user?.role || 'Salesman',
+          remark: isCreditOverride ? 'Order created with Credit Limit Override' : 'Order created via CRM'
+        }];
+
+        await db.addOrder({ 
+          ...form, 
+          institutionId, 
+          total, 
+          createdBy: user?.name || user?.email || '',
+          history: orderHistory,
+          remarks: isCreditOverride ? 'Credit limit bypassed by Accounts Executive' : 'Initial order submission',
+          creditOverride: isCreditOverride
+        });
+        toast.success('Order created.');
+      }
+      setModalOpen(false);
+    } catch (e) {
+      toast.error('Error: ' + e.message);
+    } finally {
+      setSaveLoading(false);
+    }
   };
+
   const filtered = orders.filter((o) => {
     const matchSearch = o.orderNumber?.toLowerCase().includes(search.toLowerCase()) || o.institutionName?.toLowerCase().includes(search.toLowerCase());
     const matchStatus = !statusFilter || o.status === statusFilter;
@@ -342,10 +406,22 @@ export default function Orders() {
           </div>
           <Textarea label="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Order notes…" />
           
+          {form.status === 'Delivered' && (
+            <div className="flex flex-col gap-4 border-t border-[var(--border)] pt-4 mt-2">
+              <h4 className="text-sm font-semibold text-[var(--text-primary)]">Proof of Delivery</h4>
+              <Input label="6-Digit Customer Delivery PIN" required placeholder="e.g. 123456" value={deliveryData.deliveryPin} onChange={(e) => setDeliveryData({ ...deliveryData, deliveryPin: e.target.value })} disabled={saveLoading} />
+              <Input label="Recipient Signature (Base64/Link)" required placeholder="Signature string..." value={deliveryData.signature} onChange={(e) => setDeliveryData({ ...deliveryData, signature: e.target.value })} disabled={saveLoading} />
+              <Input label="Delivery Coordinates" required placeholder="e.g. 19.0760, 72.8777" value={deliveryData.coordinates} onChange={(e) => setDeliveryData({ ...deliveryData, coordinates: e.target.value })} disabled={saveLoading} />
+            </div>
+          )}
+
           {creditCheck.overLimit && (
             <div className="p-3 text-xs bg-rose-50 border border-rose-200 text-rose-700 rounded-lg flex items-center gap-2">
               <span className="font-semibold">⚠️ Credit Limit Exceeded:</span>
               <span>Available credit: {currency.format(creditCheck.available)} / Limit: {currency.format(creditCheck.creditLimit)}.</span>
+              {user?.role === ROLES.SUPER_ADMIN && (
+                <span className="font-bold ml-auto text-rose-800">Super Admin Override Active</span>
+              )}
             </div>
           )}
 

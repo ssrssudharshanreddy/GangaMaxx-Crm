@@ -1,334 +1,666 @@
-import { addDoc, collection, doc, onSnapshot, updateDoc, runTransaction, setDoc, query, limit, orderBy, arrayUnion } from 'firebase/firestore';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth, firestore } from '../config/firebase';
 import { DBNotifier } from './dbNotifier';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { auth } from '../config/firebase';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001';
 
 export class FirestoreDatabaseService {
   constructor() {
-    this.cache = {};
-    this.errors = {};
-    this.unsubscribes = [];
-    this.collectionConfigs = [
-      { key: 'staff', names: ['staff'] },
-      { key: 'institutions', names: ['institutions'] },
-      { key: 'notifications', names: ['notifications'] },
-      { key: 'orders', names: ['orders'] },
-      { key: 'orderItems', names: ['order_items'] },
-      { key: 'quotations', names: ['quotations'] },
-      { key: 'invoices', names: ['invoices'] },
-      { key: 'payments', names: ['payments'] },
-      { key: 'tickets', names: ['tickets', 'support_tickets'] },
-      { key: 'products', names: ['products'] },
-      { key: 'procurement', names: ['procurement'] },
-      { key: 'visitLogs', names: ['visitLogs', 'visit_logs'] },
-      { key: 'followUps', names: ['followUps', 'follow_ups'] },
-      { key: 'returns', names: ['returns'] },
-      { key: 'audits', names: ['audits'] },
-      { key: 'creditAccounts', names: ['creditAccounts', 'credit_accounts'] },
-    ];
+    this.cache = {
+      staff: [],
+      institutions: [],
+      notifications: [],
+      orders: [],
+      quotations: [],
+      invoices: [],
+      payments: [],
+      tickets: [],
+      products: [],
+      procurement: [],
+      visitLogs: [],
+      followUps: [],
+      returns: [],
+      audits: [],
+      creditAccounts: [],
+      categories: [],
+    };
+    this.pollingInterval = null;
 
-    this.collectionConfigs.forEach(({ key }) => {
-      this.cache[key] = [];
-    });
-
-    if (!auth || !firestore) {
-      this.errors.firebase = 'Firebase is not configured.';
+    if (!auth) {
       return;
     }
 
-    this.authUnsubscribe = onAuthStateChanged(auth, (user) => {
-      this.detachListeners();
+    const waitForProfileReady = async (timeout = 5000) => {
+      const start = Date.now();
+      const key = 'gm_crm_active_session';
+      while (Date.now() - start < timeout) {
+        if (localStorage.getItem(key)) return true;
+        // small delay
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      return false;
+    };
+
+    this.authUnsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        this.initListeners();
+        try {
+          await waitForProfileReady(5000);
+        } catch {
+          void 0;
+        }
+        this.startPolling();
       } else {
+        this.stopPolling();
         this.clearCache();
       }
     });
   }
 
-  async getNextCounterValue(counterName) {
-    const counterDocRef = doc(firestore, 'counters', counterName);
-    return await runTransaction(firestore, async (transaction) => {
-      const counterSnap = await transaction.get(counterDocRef);
-      let currentVal = 0;
-      if (counterSnap.exists()) {
-        currentVal = counterSnap.data().value || 0;
+  async getHeaders() {
+    if (!auth.currentUser) return {};
+    try {
+      const token = await auth.currentUser.getIdToken();
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      };
+    } catch (err) {
+      try {
+        const token = await auth.currentUser.getIdToken(true);
+        return {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        };
+      } catch (err2) {
+        console.warn('Failed to get ID token:', err2);
+        return {};
       }
-      const newVal = currentVal + 1;
-      transaction.set(counterDocRef, { value: newVal });
-      return newVal;
-    });
+    }
   }
 
-  initListeners() {
-    const getQuery = (key, collectionName) => {
-      const col = collection(firestore, collectionName);
-      if (key === 'orders') return query(col, orderBy('createdAt', 'desc'), limit(200));
-      if (key === 'notifications') return query(col, limit(100));
-      if (key === 'audits') return query(col, orderBy('timestamp', 'desc'), limit(500));
-      if (key === 'payments') return query(col, orderBy('createdAt', 'desc'), limit(200));
-      if (key === 'invoices') return query(col, orderBy('createdAt', 'desc'), limit(200));
-      return col;
-    };
-
-    this.collectionConfigs.forEach(({ key, names }) => {
-      const snapshotsByName = new Map();
-
-      names.forEach((collectionName) => {
-        const unsubscribe = onSnapshot(
-          getQuery(key, collectionName),
-          (snapshot) => {
-            snapshotsByName.set(
-              collectionName,
-              snapshot.docs
-                .map((docSnap) => ({
-                  id: docSnap.id,
-                  sourceCollection: collectionName,
-                  ...docSnap.data(),
-                }))
-                .filter((item) => item.deletedAt === undefined || item.deletedAt === null)
-            );
-            this.errors[key] = null;
-            this.cache[key] = Array.from(snapshotsByName.values()).flat();
-            DBNotifier.notify(key);
-          },
-          (error) => {
-            this.errors[key] = error;
-            void 0;
-            DBNotifier.notify(key);
-          }
-        );
-        this.unsubscribes.push(unsubscribe);
-      });
-    });
+  startPolling() {
+    this.stopPolling();
+    this.fetchAllData();
+    this.pollingInterval = setInterval(() => {
+      this.fetchAllData();
+    }, 5000);
   }
 
-  detachListeners() {
-    this.unsubscribes.forEach((unsubscribe) => unsubscribe());
-    this.unsubscribes = [];
+  stopPolling() {
+    if (this.pollingInterval) {
+      clearInterval(this.pollingInterval);
+      this.pollingInterval = null;
+    }
   }
 
   clearCache() {
-    this.collectionConfigs.forEach(({ key }) => {
+    Object.keys(this.cache).forEach((key) => {
       this.cache[key] = [];
       DBNotifier.notify(key);
     });
   }
 
-  destroy() {
-    this.detachListeners();
-    if (this.authUnsubscribe) this.authUnsubscribe();
+  async fetchAllData() {
+    if (!auth.currentUser) return;
+    try {
+      const headers = await this.getHeaders();
+
+      // Parallel fetch of all CRM data resources from Shared Backend
+      const [
+        staffRes, instRes, notifRes, orderRes, quoteRes, invRes,
+        payRes, ticketRes, prodRes, procRes, visitRes, followRes,
+        retRes, auditRes, creditRes, catRes
+      ] = await Promise.all([
+        fetch(`${API_URL}/api/staff`, { headers }),
+        fetch(`${API_URL}/api/institutions`, { headers }),
+        fetch(`${API_URL}/api/notifications`, { headers }),
+        fetch(`${API_URL}/api/orders`, { headers }),
+        fetch(`${API_URL}/api/quotations`, { headers }),
+        fetch(`${API_URL}/api/invoices`, { headers }),
+        fetch(`${API_URL}/api/payments`, { headers }),
+        fetch(`${API_URL}/api/tickets`, { headers }),
+        fetch(`${API_URL}/api/products`, { headers }),
+        fetch(`${API_URL}/api/procurement`, { headers }),
+        fetch(`${API_URL}/api/visit-logs`, { headers }),
+        fetch(`${API_URL}/api/follow-ups`, { headers }),
+        fetch(`${API_URL}/api/returns`, { headers }),
+        fetch(`${API_URL}/api/audits`, { headers }).catch(() => null),
+        fetch(`${API_URL}/api/credit-accounts`, { headers }),
+        fetch(`${API_URL}/api/categories`, { headers }).catch(() => null),
+      ]);
+
+      // if unauthorized responses present, stop polling and sign out
+      const responses = [staffRes, instRes, notifRes, orderRes, quoteRes, invRes, payRes, ticketRes];
+      if (responses.some(r => r && (r.status === 401 || r.status === 403))) {
+        this.stopPolling();
+        this.clearCache();
+        try { await signOut(auth); } catch { void 0; }
+        return;
+      }
+
+      if (staffRes?.ok) { this.cache.staff = await staffRes.json(); DBNotifier.notify('staff'); }
+      if (instRes?.ok) { this.cache.institutions = await instRes.json(); DBNotifier.notify('institutions'); }
+      if (notifRes?.ok) { this.cache.notifications = await notifRes.json(); DBNotifier.notify('notifications'); }
+      if (orderRes?.ok) { this.cache.orders = await orderRes.json(); DBNotifier.notify('orders'); }
+      if (quoteRes?.ok) { this.cache.quotations = await quoteRes.json(); DBNotifier.notify('quotations'); }
+      if (invRes?.ok) { this.cache.invoices = await invRes.json(); DBNotifier.notify('invoices'); }
+      if (payRes?.ok) { this.cache.payments = await payRes.json(); DBNotifier.notify('payments'); }
+      if (ticketRes?.ok) { this.cache.tickets = await ticketRes.json(); DBNotifier.notify('tickets'); }
+      if (prodRes?.ok) { this.cache.products = await prodRes.json(); DBNotifier.notify('products'); }
+      if (procRes?.ok) { this.cache.procurement = await procRes.json(); DBNotifier.notify('procurement'); }
+      if (visitRes?.ok) { this.cache.visitLogs = await visitRes.json(); DBNotifier.notify('visitLogs'); }
+      if (followRes?.ok) { this.cache.followUps = await followRes.json(); DBNotifier.notify('followUps'); }
+      if (retRes?.ok) { this.cache.returns = await retRes.json(); DBNotifier.notify('returns'); }
+      if (auditRes?.ok) { this.cache.audits = await auditRes.json(); DBNotifier.notify('audits'); }
+      if (creditRes?.ok) { this.cache.creditAccounts = await creditRes.json(); DBNotifier.notify('creditAccounts'); }
+      if (catRes?.ok) { this.cache.categories = await catRes.json(); DBNotifier.notify('categories'); }
+    } catch (error) {
+      console.error('Error fetching CRM data from Shared Backend:', error);
+    }
   }
 
-  getStaff() { return this.cache.staff || []; }
-  getInstitutions() { return this.cache.institutions || []; }
+  getStaff() { return this.cache.staff; }
+  getInstitutions() { return this.cache.institutions; }
   getNotifications(userId) {
     const all = this.cache.notifications || [];
     return userId ? all.filter((item) => item.recipientId === userId) : all;
   }
-  getOrders() { return this.cache.orders || []; }
-  getQuotations() { return this.cache.quotations || []; }
-  getInvoices() { return this.cache.invoices || []; }
-  getPayments() { return this.cache.payments || []; }
-  getTickets() { return this.cache.tickets || []; }
-  getProducts() { return this.cache.products || []; }
-  getProcurement() { return this.cache.procurement || []; }
-  getVisitLogs() { return this.cache.visitLogs || []; }
-  getFollowUps() { return this.cache.followUps || []; }
-  getReturns() { return this.cache.returns || []; }
-  getAudits() { return this.cache.audits || []; }
-  getCreditAccounts() { return this.cache.creditAccounts || []; }
+  getOrders() { return this.cache.orders; }
+  getQuotations() { return this.cache.quotations; }
+  getInvoices() { return this.cache.invoices; }
+  getPayments() { return this.cache.payments; }
+  getTickets() { return this.cache.tickets; }
+  getProducts() { return this.cache.products; }
+  getProcurement() { return this.cache.procurement; }
+  getVisitLogs() { return this.cache.visitLogs; }
+  getFollowUps() { return this.cache.followUps; }
+  getReturns() { return this.cache.returns; }
+  getAudits() { return this.cache.audits; }
+  getCreditAccounts() { return this.cache.creditAccounts; }
+  getCategories() { return this.cache.categories; }
 
-  async addStaff(staff) {
-    const docRef = await addDoc(collection(firestore, 'staff'), {
-      ...staff,
-      createdAt: new Date().toISOString().slice(0, 10),
+  // Mutation operations routed via Shared Backend API
+
+  /**
+   * createStaff — creates a Firebase Auth user + Firestore staff document
+   * through the backend (no direct client-side Firebase Admin usage).
+   */
+  async createStaff(staffData, actor) {
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/staff`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ...staffData, createdBy: actor?.email || actor?.id }),
     });
-    return { id: docRef.id, ...staff };
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to create staff member');
+    }
+    const data = await res.json();
+    this.fetchAllData();
+    return data;
   }
 
-  async updateStaff(id, updates) {
-    await updateDoc(doc(firestore, 'staff', id), updates);
+  /** Legacy alias */
+  async addStaff(staff) {
+    return this.createStaff(staff, null);
+  }
+
+  async updateStaff(id, updates, actor, remark) {
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/staff/${id}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ updates, remark }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update staff');
+    }
+    this.fetchAllData();
+  }
+
+  async resetStaffPassword(id) {
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/staff/${id}/reset-password`, {
+      method: 'POST',
+      headers,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to reset password');
+    }
+  }
+
+  /**
+   * secureUpdateDoc — generic document update with mandatory remark (governance rule).
+   */
+  async secureUpdateDoc(collectionName, id, updates, actor, remark) {
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/${collectionName}/${id}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ updates, remark, actorId: actor?.id, actorEmail: actor?.email }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Failed to update ${collectionName} document`);
+    }
+    this.fetchAllData();
   }
 
   async addInstitution(institution) {
-    const docRef = await addDoc(collection(firestore, 'institutions'), {
-      ...institution,
-      createdAt: new Date().toISOString().slice(0, 10),
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/institutions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(institution),
     });
-    return { id: docRef.id, ...institution };
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add institution');
+    }
+    const data = await res.json();
+    this.fetchAllData();
+    return data;
   }
 
-  async updateInstitution(id, updates) {
-    await updateDoc(doc(firestore, 'institutions', id), updates);
+  async updateInstitution(id, updates, actor, remark) {
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/institutions/${id}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ updates, remark }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update institution');
+    }
+    this.fetchAllData();
+  }
+
+  async approveInstitution(id, payload) {
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/institutions/${id}/approve`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to approve institution');
+    }
+    this.fetchAllData();
   }
 
   async addProduct(product) {
-    const docRef = await addDoc(collection(firestore, 'products'), {
-      ...product,
-      createdAt: new Date().toISOString().slice(0, 10),
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/products`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(product),
     });
-    return { id: docRef.id, ...product };
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add product');
+    }
+    const data = await res.json();
+    this.fetchAllData();
+    return data;
   }
 
-  async updateProduct(id, updates) {
-    await updateDoc(doc(firestore, 'products', id), updates);
+  async updateProduct(id, updates, actor, remark) {
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/products/${id}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ updates, remark }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update product');
+    }
+    this.fetchAllData();
   }
 
   async addProcurement(po) {
-    const docRef = await addDoc(collection(firestore, 'procurement'), {
-      ...po,
-      createdAt: new Date().toISOString().slice(0, 10),
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/procurement`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(po),
     });
-    return { id: docRef.id, ...po };
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add procurement');
+    }
+    const data = await res.json();
+    this.fetchAllData();
+    return data;
   }
 
   async updateProcurement(id, updates) {
-    await updateDoc(doc(firestore, 'procurement', id), updates);
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/procurement/${id}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update procurement');
+    }
+    this.fetchAllData();
   }
 
   async addOrder(order) {
-    const nextVal = await this.getNextCounterValue('orders');
-    const orderNumber = `ORD-${new Date().getFullYear()}-${String(nextVal).padStart(5, '0')}`;
-    const orderData = {
-      ...order,
-      orderNumber,
-      deletedAt: null,
-      createdAt: new Date().toISOString().slice(0, 10),
-    };
-    await setDoc(doc(firestore, 'orders', orderNumber), orderData);
-    return { id: orderNumber, ...orderData };
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/orders`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(order),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add order');
+    }
+    const data = await res.json();
+    this.fetchAllData();
+    return data;
   }
 
-  async updateOrder(id, updates) {
-    const baseUpdate = { ...updates };
-    if (updates.status) {
-      baseUpdate.statusHistory = arrayUnion({
-        status: updates.status,
-        changedAt: new Date().toISOString(),
-        changedBy: updates._changedBy || 'system',
-      });
-      delete baseUpdate._changedBy;
+  async updateOrder(id, updates, actor, remark) {
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/orders/${id}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ updates, remark }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update order');
     }
-    await updateDoc(doc(firestore, 'orders', id), baseUpdate);
+    this.fetchAllData();
   }
 
   async addQuotation(quote) {
-    const nextVal = await this.getNextCounterValue('quotations');
-    const quoteNumber = `QT-${new Date().getFullYear()}-${String(nextVal).padStart(5, '0')}`;
-    const quoteData = {
-      ...quote,
-      quoteNumber,
-      deletedAt: null,
-      createdAt: new Date().toISOString().slice(0, 10),
-    };
-    await setDoc(doc(firestore, 'quotations', quoteNumber), quoteData);
-    return { id: quoteNumber, ...quoteData };
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/quotations`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(quote),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add quotation');
+    }
+    const data = await res.json();
+    this.fetchAllData();
+    return data;
   }
 
   async updateQuotation(id, updates) {
-    await updateDoc(doc(firestore, 'quotations', id), updates);
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/quotations/${id}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update quotation');
+    }
+    this.fetchAllData();
+  }
+
+  async deliverOrder(id, payload) {
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/orders/${id}/deliver`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to verify delivery');
+    }
+    this.fetchAllData();
   }
 
   async addInvoice(invoice) {
-    const nextVal = await this.getNextCounterValue('invoices');
-    const invoiceNumber = `INV-${new Date().getFullYear()}-${String(nextVal).padStart(5, '0')}`;
-    const invoiceData = {
-      ...invoice,
-      invoiceNumber,
-      deletedAt: null,
-      createdAt: new Date().toISOString().slice(0, 10),
-    };
-    await setDoc(doc(firestore, 'invoices', invoiceNumber), invoiceData);
-    return { id: invoiceNumber, ...invoiceData };
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/invoices`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(invoice),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add invoice');
+    }
+    const data = await res.json();
+    this.fetchAllData();
+    return data;
   }
 
   async updateInvoice(id, updates) {
-    await updateDoc(doc(firestore, 'invoices', id), updates);
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/invoices/${id}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update invoice');
+    }
+    this.fetchAllData();
   }
 
-  async softDeleteDoc(collectionName, id) {
-    await updateDoc(doc(firestore, collectionName, id), {
-      deletedAt: new Date().toISOString()
+  async softDeleteDoc(collectionName, id, actor, remark) {
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/soft-delete`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ collectionName, id, remark }),
     });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to archive document');
+    }
+    this.fetchAllData();
   }
 
   async addPayment(payment) {
-    const docRef = await addDoc(collection(firestore, 'payments'), {
-      ...payment,
-      createdAt: new Date().toISOString().slice(0, 10),
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/payments`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payment),
     });
-    return { id: docRef.id, ...payment };
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add payment');
+    }
+    const data = await res.json();
+    this.fetchAllData();
+    return data;
   }
 
   async addTicket(ticket) {
-    const docRef = await addDoc(collection(firestore, 'tickets'), {
-      ...ticket,
-      createdAt: new Date().toISOString().slice(0, 10),
-      messages: ticket.messages || [],
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/tickets`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(ticket),
     });
-    return { id: docRef.id, ...ticket };
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to open ticket');
+    }
+    const data = await res.json();
+    this.fetchAllData();
+    return data;
   }
 
   async updateTicket(id, updates) {
-    await updateDoc(doc(firestore, 'tickets', id), updates);
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/tickets/${id}/messages`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update ticket');
+    }
+    this.fetchAllData();
   }
 
   async addFollowUp(followUp) {
-    const docRef = await addDoc(collection(firestore, 'followUps'), {
-      ...followUp,
-      createdAt: new Date().toISOString().slice(0, 10),
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/follow-ups`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(followUp),
     });
-    return { id: docRef.id, ...followUp };
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add follow up');
+    }
+    const data = await res.json();
+    this.fetchAllData();
+    return data;
   }
 
   async updateFollowUp(id, updates) {
-    await updateDoc(doc(firestore, 'followUps', id), updates);
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/follow-ups/${id}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update follow up');
+    }
+    this.fetchAllData();
   }
 
   async addVisitLog(visitLog) {
-    const docRef = await addDoc(collection(firestore, 'visitLogs'), visitLog);
-    return { id: docRef.id, ...visitLog };
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/visit-logs`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(visitLog),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add visit log');
+    }
+    const data = await res.json();
+    this.fetchAllData();
+    return data;
   }
 
   async addReturn(ret) {
-    const docRef = await addDoc(collection(firestore, 'returns'), {
-      ...ret,
-      createdAt: new Date().toISOString().slice(0, 10),
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/returns`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(ret),
     });
-    return { id: docRef.id, ...ret };
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add return');
+    }
+    const data = await res.json();
+    this.fetchAllData();
+    return data;
   }
 
   async updateReturn(id, updates) {
-    await updateDoc(doc(firestore, 'returns', id), updates);
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/returns/${id}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to update return');
+    }
+    this.fetchAllData();
+  }
+
+  async addCategory(category) {
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/categories`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(category),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to add category');
+    }
+    const data = await res.json();
+    this.fetchAllData();
+    return data;
   }
 
   async addNotification(notif) {
-    const docRef = await addDoc(collection(firestore, 'notifications'), {
-      ...notif,
-      read: false,
-      createdAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/notifications`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(notif),
     });
-    return { id: docRef.id, ...notif };
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to add notification');
+    }
+    const data = await res.json();
+    this.fetchAllData();
+    return data;
   }
 
   async markNotificationRead(id) {
-    await updateDoc(doc(firestore, 'notifications', id), {
-      read: true,
-      readAt: new Date().toISOString(),
+    const headers = await this.getHeaders();
+    const res = await fetch(`${API_URL}/api/notifications/${id}/read`, {
+      method: 'POST',
+      headers,
     });
+    if (res.ok) {
+      this.fetchAllData();
+    }
   }
 
   async logAuditAction(actorId, actorEmail, actorRole, action, entityType, entityId, details) {
-    await addDoc(collection(firestore, 'audits'), {
-      actorId,
-      actorEmail,
-      actorRole,
-      action,
-      entityType,
-      entityId,
-      timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      details,
-    });
+    try {
+      const headers = await this.getHeaders();
+      await fetch(`${API_URL}/api/audits`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          actorId,
+          actorEmail,
+          actorRole,
+          action,
+          entityType,
+          entityId,
+          details,
+          timestamp: new Date().toISOString(),
+        }),
+      });
+    } catch {
+      // Audit logging must not crash the UI
+    }
+  }
+
+  destroy() {
+    this.stopPolling();
+    if (this.authUnsubscribe) this.authUnsubscribe();
   }
 }

@@ -3,7 +3,8 @@ import { useCollection } from '../../hooks/useDb';
 import { useAuth } from '../../context/AuthContext';
 import { db, logAuditAction } from '../../services';
 import { PageHeader, Card, Button, Input, Select, Badge, Modal, EmptyState } from '../../components/ui/ui-components';
-import { Receipt, Plus, Pencil, Eye, Download } from 'lucide-react';
+import { Receipt, Plus, Pencil, Eye, Download, AlertTriangle } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 const STATUSES = [
   { value: 'unpaid', label: 'Unpaid' },
@@ -154,18 +155,24 @@ export default function InvoiceManagement() {
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 20;
 
-  const emptyForm = { orderNumber: '', institutionName: '', amount: 0, status: 'unpaid', dueDate: '', notes: '' };
+  const emptyForm = { orderNumber: '', institutionName: '', amount: 0, status: 'unpaid', dueDate: '', notes: '', cancellationRemark: '' };
   const [form, setForm] = useState(emptyForm);
 
   const openAdd = () => { setEditing(null); setForm(emptyForm); setModalOpen(true); };
   const openEdit = (inv) => {
     setEditing(inv);
-    setForm({ orderNumber: inv.orderNumber || '', institutionName: inv.institutionName || '', amount: inv.total || inv.amount || 0, status: inv.status || 'unpaid', dueDate: inv.dueDate || '', notes: inv.notes || '' });
+    setForm({ orderNumber: inv.orderNumber || '', institutionName: inv.institutionName || '', amount: inv.total || inv.amount || 0, status: inv.status || 'unpaid', dueDate: inv.dueDate || '', notes: inv.notes || '', cancellationRemark: inv.cancellationRemark || '' });
     setModalOpen(true);
   };
 
   const handleSave = () => {
     if (!form.institutionName || !form.amount) return;
+    
+    if (form.status === 'cancelled' && (!form.cancellationRemark || form.cancellationRemark.trim().length < 5)) {
+      toast.error('A mandatory remark (min 5 chars) is required for invoice cancellation.');
+      return;
+    }
+
     const invoiceNumber = `INV-${Date.now().toString().slice(-6)}`;
     const selectedInst = institutions.find(i => i.name === form.institutionName);
     const institutionId = selectedInst ? selectedInst.id : '';
@@ -368,6 +375,21 @@ export default function InvoiceManagement() {
             <Input label="Due Date" type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
           </div>
           <Select label="Status" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} options={STATUSES} />
+          {form.status === 'cancelled' && (
+            <div className="flex flex-col gap-2 border-2 border-amber-400 bg-amber-50 rounded-2xl p-4">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <span className="text-sm font-bold text-amber-900">Cancellation Remark Required</span>
+              </div>
+              <Input
+                label="Reason for Cancellation"
+                required
+                value={form.cancellationRemark}
+                onChange={(e) => setForm({ ...form, cancellationRemark: e.target.value })}
+                placeholder="Explain the reason for cancellation (min 5 chars)"
+              />
+            </div>
+          )}
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
             <Button onClick={handleSave}>{editing ? 'Save Changes' : 'Create Invoice'}</Button>

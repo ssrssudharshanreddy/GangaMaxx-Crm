@@ -41,11 +41,15 @@ export default function InventoryManagement() {
       toast.error('Adjustment quantity must be a non-negative number');
       return;
     }
+    if (!adjustReason || adjustReason.trim().length < 5) {
+      toast.error('A mandatory remark (min 5 characters) is required for inventory adjustments.');
+      return;
+    }
     const current = adjustingProduct.stockLevel || 0;
     let newStock;
     if (adjustType === 'add') {
       newStock = current + adjustQty;
-    } else if (adjustType === 'remove') {
+    } else if (adjustType === 'adjust') {
       if (adjustQty > current) {
         toast.error('Cannot remove more stock than is currently available');
         return;
@@ -168,9 +172,10 @@ export default function InventoryManagement() {
             value={adjustType}
             onChange={e => setAdjustType(e.target.value)}
             options={[
-              { value: 'add', label: 'Add stock (incoming)' },
-              { value: 'remove', label: 'Remove stock (damage/loss)' },
-              { value: 'set', label: 'Set exact quantity' },
+              { value: 'add', label: 'Add Stock' },
+              { value: 'update', label: 'Update Stock' },
+              { value: 'adjust', label: 'Adjust Stock (Remove)' },
+              { value: 'correct', label: 'Correct Stock (Audit)' },
             ]}
           />
           <Input
@@ -181,8 +186,9 @@ export default function InventoryManagement() {
             onChange={e => setAdjustQty(Number(e.target.value))}
           />
           <Input
-            label="Reason (optional)"
-            placeholder="e.g. Supplier delivery, damaged goods"
+            label="Mandatory Remark"
+            required
+            placeholder="e.g. Audit correction, Supplier delivery"
             value={adjustReason}
             onChange={e => setAdjustReason(e.target.value)}
           />

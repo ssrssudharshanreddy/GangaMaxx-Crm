@@ -5,58 +5,106 @@ service cloud.firestore {
     // ==========================================
     // HELPER FUNCTIONS
     // ==========================================
-    
-    // Checks if user is logged in
+
     function isAuthenticated() {
       return request.auth != null;
     }
-    
-    // Fetches the user profile document from Firestore
+
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
-    
-    // Ensures user is logged in and status is active
+
     function isActive() {
       return isAuthenticated() && getUserData().status == 'active';
     }
-    
-    // Gets the current user's role
+
     function getRole() {
       return getUserData().role;
     }
 
-    // Role verification helper supporting both camelCase and snake_case database naming
-    function hasRole(role) {
+    /**
+     * Canonical role check — supports both the new PascalCase role names
+     * (set by AuthContext normalization) and legacy lowercase variants
+     * for backward-compatibility during migration.
+     */
+    function isSuperAdmin() {
       return isActive() && (
-        getRole() == role ||
-        (role == 'owner' && getRole() == 'owner') ||
-        (role == 'salesAdmin' && (getRole() == 'salesAdmin' || getRole() == 'sales_admin')) ||
-        (role == 'salesman' && getRole() == 'salesman') ||
-        (role == 'accountsManager' && (getRole() == 'accountsManager' || getRole() == 'accounts_manager' || getRole() == 'accounts_executive')) ||
-        (role == 'complianceAdmin' && (getRole() == 'complianceAdmin' || getRole() == 'compliance_admin' || getRole() == 'compliance_manager')) ||
-        (role == 'supportStaff' && (getRole() == 'supportStaff' || getRole() == 'support_staff' || getRole() == 'support_manager')) ||
-        (role == 'warehouseStaff' && (getRole() == 'warehouseStaff' || getRole() == 'warehouse_staff' || getRole() == 'warehouse_manager')) ||
-        (role == 'customer' && (getRole() == 'customer' || getRole() == 'customer_owner' || getRole() == 'customer_buyer' || getRole() == 'customer_admin' || getRole() == 'customer_user'))
+        getRole() == 'Super Admin' ||
+        getRole() == 'owner'
       );
     }
 
-    // Helper checking if the user is administrative CRM staff
+    function isSalesExecutive() {
+      return isActive() && (
+        getRole() == 'Sales Executive' ||
+        getRole() == 'sales_admin' ||
+        getRole() == 'salesAdmin'
+      );
+    }
+
+    function isSalesman() {
+      return isActive() && (
+        getRole() == 'Salesman' ||
+        getRole() == 'salesman'
+      );
+    }
+
+    function isAccountsExecutive() {
+      return isActive() && (
+        getRole() == 'Accounts Executive' ||
+        getRole() == 'accounts_executive' ||
+        getRole() == 'accounts_manager' ||
+        getRole() == 'accountsManager'
+      );
+    }
+
+    function isWarehouseExecutive() {
+      return isActive() && (
+        getRole() == 'Warehouse Executive' ||
+        getRole() == 'warehouse_manager' ||
+        getRole() == 'warehouseExecutive'
+      );
+    }
+
+    function isWarehouseStaff() {
+      return isActive() && (
+        getRole() == 'Warehouse Staff' ||
+        getRole() == 'warehouse_staff' ||
+        getRole() == 'warehouseStaff'
+      );
+    }
+
+    function isWarehouseTeam() {
+      return isWarehouseExecutive() || isWarehouseStaff();
+    }
+
+    function isSalesTeam() {
+      return isSalesExecutive() || isSalesman();
+    }
+
     function isCRMStaff() {
+      return isSuperAdmin() || isSalesExecutive() || isSalesman() ||
+             isAccountsExecutive() || isWarehouseExecutive() || isWarehouseStaff();
+    }
+
+    function isCustomer() {
       return isActive() && (
-        getRole() in ['owner', 'salesAdmin', 'sales_admin', 'salesman', 'accountsManager', 'accounts_manager', 'accounts_executive', 'complianceAdmin', 'compliance_admin', 'compliance_manager', 'supportStaff', 'support_staff', 'support_manager', 'warehouseStaff', 'warehouse_staff', 'warehouse_manager']
+        getRole() == 'Customer' ||
+        getRole() == 'customer' ||
+        getRole() == 'customer_admin' ||
+        getRole() == 'customer_user'
       );
     }
 
-    // Checks if the user is associated with a specific B2B institution ID
     function belongsToInstitution(instId) {
       return isActive() && getUserData().institutionId == instId;
     }
 
-    // Check if user has read-only access (complianceAdmin has read-only access to everything)
-    function isReadOnlyCompliance() {
-      return hasRole('complianceAdmin');
-    }
+    // ==========================================
+    // GOVERNANCE MANDATE: NO HARD DELETES
+    // All collections enforce "Archive Only".
+    // Hard deletes are NEVER permitted via client.
+    // ==========================================
 
     // ==========================================
     // COLLECTION RULES
@@ -64,156 +112,215 @@ service cloud.firestore {
 
     // 1. USERS COLLECTION
     match /users/{userId} {
-      // customers can only read/write their own profile; complianceAdmin has read-only access; salesAdmin/owner have administrative access
       allow read: if isAuthenticated() && (
-        request.auth.uid == userId || 
-        hasRole('owner') || 
-        hasRole('salesAdmin') || 
-        isReadOnlyCompliance()
+        request.auth.uid == userId ||
+        isSuperAdmin() ||
+        isSalesExecutive()
       );
-      allow create: if hasRole('owner') || hasRole('salesAdmin') || (isAuthenticated() && request.auth.uid == userId);
-      allow update: if hasRole('owner') || hasRole('salesAdmin') || (
-        request.auth.uid == userId && 
+      allow create: if isSuperAdmin() || isSalesExecutive() ||
+                    (isAuthenticated() && request.auth.uid == userId);
+      allow update: if isSuperAdmin() || isSalesExecutive() || (
+        request.auth.uid == userId &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'disabled', 'status'])
       );
-      allow delete: if hasRole('owner');
-    }
-
-    // 2. CUSTOMERS / INSTITUTIONS COLLECTIONS
-    match /customers/{customerId} {
-      // salesman can only read customers assigned to them; complianceAdmin has read-only; salesAdmin/owner have full access
-      allow read: if hasRole('owner') || 
-                  hasRole('salesAdmin') || 
-                  isReadOnlyCompliance() ||
-                  (hasRole('salesman') && resource.data.assignedSalesmanId == request.auth.uid) ||
-                  (hasRole('customer') && resource.data.linkedUid == request.auth.uid);
-      
-      allow create: if hasRole('owner') || hasRole('salesAdmin') || hasRole('salesman');
-      allow update: if hasRole('owner') || hasRole('salesAdmin') || (hasRole('salesman') && resource.data.assignedSalesmanId == request.auth.uid) || hasRole('supportStaff');
-      allow delete: if hasRole('owner');
-    }
-
-    match /institutions/{instId} {
-      allow read: if isCRMStaff() || belongsToInstitution(instId) || isReadOnlyCompliance();
-      allow create, update: if hasRole('owner') || hasRole('salesAdmin');
+      // GOVERNANCE: No hard deletes
       allow delete: if false;
     }
 
-    // 3. ORDERS COLLECTION
-    match /orders/{orderId} {
-      allow read: if hasRole('owner') || 
-                  hasRole('salesAdmin') || 
-                  hasRole('warehouseStaff') || 
-                  hasRole('accountsManager') || 
-                  isReadOnlyCompliance() || 
-                  (hasRole('salesman') && resource.data.assignedSalesmanId == request.auth.uid) ||
-                  (hasRole('customer') && (resource.data.linkedUid == request.auth.uid || belongsToInstitution(resource.data.institutionId)));
-      
-      allow create: if hasRole('owner') || hasRole('salesAdmin') || hasRole('salesman') || 
-                    (hasRole('customer') && request.resource.data.institutionId == getUserData().institutionId);
-      
-      allow update: if hasRole('owner') || 
-                    hasRole('salesAdmin') ||
-                    (hasRole('customer') && (resource.data.linkedUid == request.auth.uid || belongsToInstitution(resource.data.institutionId)) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notes'])) ||
-                    (hasRole('warehouseStaff') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dispatchStatus', 'dispatchDate', 'trackingNumber', 'status'])) ||
-                    (hasRole('accountsManager') && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paymentStatus', 'paymentDate', 'paymentRef', 'status']));
-      
-      allow delete: if hasRole('owner');
+    // 2. INSTITUTIONS COLLECTION
+    match /institutions/{instId} {
+      allow read: if isCRMStaff() || belongsToInstitution(instId);
+      allow create: if isSuperAdmin() || isSalesExecutive();
+      allow update: if isSuperAdmin() || isSalesExecutive() || isAccountsExecutive();
+      // GOVERNANCE: No hard deletes — use status: 'archived'
+      allow delete: if false;
     }
 
-    // 4. INVOICES & PAYMENTS
-    match /invoices/{invoiceId} {
-      allow read: if hasRole('owner') || hasRole('salesAdmin') || hasRole('accountsManager') || isReadOnlyCompliance() || (hasRole('customer') && belongsToInstitution(resource.data.institutionId));
-      allow create, update: if hasRole('owner') || hasRole('salesAdmin') || hasRole('accountsManager');
-      allow delete: if hasRole('owner');
-    }
-
-    match /payments/{paymentId} {
-      allow read: if hasRole('owner') || hasRole('salesAdmin') || hasRole('accountsManager') || isReadOnlyCompliance() || (hasRole('customer') && belongsToInstitution(resource.data.institutionId));
-      allow create: if hasRole('owner') || hasRole('salesAdmin') || hasRole('accountsManager') || 
-                    (hasRole('customer') && request.resource.data.institutionId == getUserData().institutionId);
-      allow update: if hasRole('owner') || hasRole('salesAdmin') || hasRole('accountsManager');
-      allow delete: if hasRole('owner');
-    }
-
-    // 5. QUOTATIONS, CREDIT ACCOUNTS, RETURNS & NOTIFICATIONS
-    match /quotations/{quotationId} {
-      allow read: if isCRMStaff() || isReadOnlyCompliance() || (hasRole('customer') && belongsToInstitution(resource.data.institutionId));
-      allow create, update: if hasRole('owner') || hasRole('salesAdmin') || hasRole('salesman');
-      allow delete: if hasRole('owner');
-    }
-
-    match /creditAccounts/{accId} {
-      allow read: if isCRMStaff() || (hasRole('customer') && belongsToInstitution(resource.data.institutionId)) || isReadOnlyCompliance();
-      allow write: if hasRole('owner') || hasRole('salesAdmin') || hasRole('accountsManager');
-    }
-
-    match /returns/{returnId} {
-      allow read: if isCRMStaff() || (hasRole('customer') && belongsToInstitution(resource.data.institutionId)) || isReadOnlyCompliance();
-      allow create: if isAuthenticated() && (isCRMStaff() || (hasRole('customer') && request.resource.data.institutionId == getUserData().institutionId));
-      allow update: if isCRMStaff();
-      allow delete: if hasRole('owner');
-    }
-
-    match /notifications/{notifId} {
-      allow read: if isAuthenticated() && (resource.data.recipientId == request.auth.uid || isCRMStaff());
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (resource.data.recipientId == request.auth.uid || isCRMStaff());
-      allow delete: if hasRole('owner');
-    }
-
-    // 6. CRM VISIT LOGS, FOLLOW UPS & PROCUREMENT
-    match /visitLogs/{logId} {
-      allow read: if hasRole('owner') || hasRole('salesAdmin') || (hasRole('salesman') && resource.data.salespersonId == request.auth.uid) || isReadOnlyCompliance();
-      allow write: if hasRole('owner') || hasRole('salesAdmin') || hasRole('salesman');
-    }
-
-    match /followUps/{followId} {
-      allow read: if hasRole('owner') || hasRole('salesAdmin') || (hasRole('salesman') && resource.data.assignedTo == request.auth.uid) || isReadOnlyCompliance();
-      allow write: if hasRole('owner') || hasRole('salesAdmin') || hasRole('salesman');
-    }
-
-    match /procurement/{poId} {
-      allow read: if hasRole('owner') || hasRole('warehouseStaff') || isReadOnlyCompliance();
-      allow write: if hasRole('owner') || hasRole('warehouseStaff');
-    }
-
-    // 7. OTHER COLLECTIONS (Staff, Products, Tickets, Settings, Counters)
+    // 3. STAFF COLLECTION
     match /staff/{memberId} {
-      allow read: if isAuthenticated();
-      allow write: if hasRole('owner') || hasRole('salesAdmin');
+      allow read: if isCRMStaff();
+      allow create: if isSuperAdmin();
+      allow update: if isSuperAdmin();
+      // GOVERNANCE: No hard deletes
+      allow delete: if false;
     }
 
+    // 4. ORDERS COLLECTION
+    match /orders/{orderId} {
+      allow read: if isSuperAdmin() ||
+                  isSalesExecutive() ||
+                  isWarehouseTeam() ||
+                  isAccountsExecutive() ||
+                  (isSalesman() && resource.data.salesmanId == request.auth.uid) ||
+                  (isCustomer() && (resource.data.linkedUid == request.auth.uid || belongsToInstitution(resource.data.institutionId)));
+
+      allow create: if isSuperAdmin() || isSalesExecutive() || isSalesman() ||
+                    (isCustomer() && request.resource.data.institutionId == getUserData().institutionId);
+
+      allow update: if isSuperAdmin() ||
+                    isSalesExecutive() ||
+                    (isAccountsExecutive() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paymentStatus', 'paymentDate', 'paymentRef', 'status'])) ||
+                    (isWarehouseTeam() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dispatchStatus', 'dispatchDate', 'trackingNumber', 'status'])) ||
+                    (isCustomer() && belongsToInstitution(resource.data.institutionId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notes']));
+
+      // GOVERNANCE: No hard deletes
+      allow delete: if false;
+    }
+
+    // 5. QUOTATIONS COLLECTION
+    match /quotations/{quotationId} {
+      allow read: if isSuperAdmin() || isSalesTeam() ||
+                  (isCustomer() && belongsToInstitution(resource.data.institutionId));
+      allow create: if isSuperAdmin() || isSalesTeam();
+      allow update: if isSuperAdmin() || isSalesExecutive();
+      // GOVERNANCE: No hard deletes
+      allow delete: if false;
+    }
+
+    // 6. INVOICES COLLECTION
+    match /invoices/{invoiceId} {
+      allow read: if isSuperAdmin() || isSalesExecutive() || isAccountsExecutive() ||
+                  (isCustomer() && belongsToInstitution(resource.data.institutionId));
+      allow create: if isSuperAdmin() || isAccountsExecutive();
+      allow update: if isSuperAdmin() || isAccountsExecutive();
+      // GOVERNANCE: No hard deletes
+      allow delete: if false;
+    }
+
+    // 7. PAYMENTS COLLECTION
+    match /payments/{paymentId} {
+      allow read: if isSuperAdmin() || isSalesExecutive() || isAccountsExecutive() ||
+                  (isCustomer() && belongsToInstitution(resource.data.institutionId));
+      allow create: if isSuperAdmin() || isAccountsExecutive() ||
+                    (isCustomer() && request.resource.data.institutionId == getUserData().institutionId);
+      allow update: if isSuperAdmin() || isAccountsExecutive();
+      // GOVERNANCE: No hard deletes
+      allow delete: if false;
+    }
+
+    // 8. CREDIT ACCOUNTS COLLECTION
+    match /creditAccounts/{accId} {
+      allow read: if isSuperAdmin() || isAccountsExecutive() ||
+                  (isCustomer() && belongsToInstitution(resource.data.institutionId));
+      allow create: if isSuperAdmin() || isAccountsExecutive();
+      allow update: if isSuperAdmin() || isAccountsExecutive();
+      // GOVERNANCE: No hard deletes
+      allow delete: if false;
+    }
+
+    // 9. PRODUCTS COLLECTION
     match /products/{productId} {
-      allow read: if isAuthenticated();
-      allow write: if hasRole('owner') || hasRole('salesAdmin') || hasRole('warehouseStaff');
+      allow read: if isCRMStaff();
+      allow create: if isSuperAdmin() || isWarehouseExecutive();
+      allow update: if isSuperAdmin() || isWarehouseExecutive();
+      // GOVERNANCE: No hard deletes
+      allow delete: if false;
     }
 
+    // 10. INVENTORY COLLECTION
+    match /inventory/{itemId} {
+      allow read: if isSuperAdmin() || isWarehouseTeam();
+      allow create: if isSuperAdmin() || isWarehouseExecutive();
+      allow update: if isSuperAdmin() || isWarehouseExecutive();
+      // GOVERNANCE: No hard deletes
+      allow delete: if false;
+    }
+
+    // 11. PROCUREMENT COLLECTION
+    match /procurement/{poId} {
+      allow read: if isSuperAdmin() || isWarehouseTeam();
+      allow create: if isSuperAdmin() || isWarehouseExecutive();
+      allow update: if isSuperAdmin() || isWarehouseExecutive() || isWarehouseStaff();
+      // GOVERNANCE: No hard deletes
+      allow delete: if false;
+    }
+
+    // 12. RETURNS COLLECTION
+    match /returns/{returnId} {
+      allow read: if isCRMStaff() ||
+                  (isCustomer() && belongsToInstitution(resource.data.institutionId));
+      allow create: if isSuperAdmin() || isSalesTeam() ||
+                    (isCustomer() && request.resource.data.institutionId == getUserData().institutionId);
+      allow update: if isSuperAdmin() || isSalesExecutive() || isAccountsExecutive() || isWarehouseTeam();
+      // GOVERNANCE: No hard deletes
+      allow delete: if false;
+    }
+
+    // 13. DELIVERIES COLLECTION
+    match /deliveries/{deliveryId} {
+      allow read: if isSuperAdmin() || isWarehouseTeam() || isSalesExecutive();
+      allow create: if isSuperAdmin() || isWarehouseExecutive();
+      allow update: if isSuperAdmin() || isWarehouseTeam();
+      // GOVERNANCE: No hard deletes
+      allow delete: if false;
+    }
+
+    // 14. VISIT LOGS COLLECTION
+    match /visitLogs/{logId} {
+      allow read: if isSuperAdmin() || isSalesExecutive() ||
+                  (isSalesman() && resource.data.salesmanId == request.auth.uid);
+      allow create: if isSuperAdmin() || isSalesTeam();
+      allow update: if isSuperAdmin() || isSalesExecutive();
+      // GOVERNANCE: No hard deletes
+      allow delete: if false;
+    }
+
+    // 15. FOLLOW-UPS COLLECTION
+    match /followUps/{followId} {
+      allow read: if isSuperAdmin() || isSalesExecutive() ||
+                  (isSalesman() && resource.data.assignedTo == request.auth.uid);
+      allow create: if isSuperAdmin() || isSalesTeam();
+      allow update: if isSuperAdmin() || isSalesExecutive() ||
+                    (isSalesman() && resource.data.assignedTo == request.auth.uid);
+      // GOVERNANCE: No hard deletes
+      allow delete: if false;
+    }
+
+    // 16. SUPPORT TICKETS COLLECTION
+    match /tickets/{ticketId} {
+      allow read: if isSuperAdmin() || isSalesExecutive() || isSalesman() || isAccountsExecutive() ||
+                  (isCustomer() && belongsToInstitution(resource.data.institutionId));
+      allow create: if isCRMStaff() ||
+                    (isCustomer() && request.resource.data.institutionId == getUserData().institutionId);
+      allow update: if isSuperAdmin() || isSalesExecutive() ||
+                    (isCustomer() && belongsToInstitution(resource.data.institutionId));
+      // GOVERNANCE: No hard deletes
+      allow delete: if false;
+    }
+
+    // 17. NOTIFICATIONS COLLECTION
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated() && (
+        resource.data.recipientId == request.auth.uid || isCRMStaff()
+      );
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        resource.data.recipientId == request.auth.uid || isSuperAdmin()
+      );
+      // GOVERNANCE: No hard deletes
+      allow delete: if false;
+    }
+
+    // 18. AUDIT LOGS — IMMUTABLE
     match /auditLogs/{logId} {
-      allow read: if hasRole('owner') || isReadOnlyCompliance();
+      allow read: if isSuperAdmin();
       allow create: if isAuthenticated();
       allow update, delete: if false; // Immutable audit trail
     }
     match /audits/{logId} {
-      allow read: if hasRole('owner') || isReadOnlyCompliance();
+      allow read: if isSuperAdmin();
       allow create: if isAuthenticated();
       allow update, delete: if false; // Immutable audit trail
     }
 
-    match /tickets/{ticketId} {
-      allow read: if hasRole('owner') || hasRole('supportStaff') || hasRole('salesAdmin') || isReadOnlyCompliance() || (hasRole('customer') && belongsToInstitution(resource.data.institutionId));
-      allow create: if isAuthenticated() && (!hasRole('customer') || request.resource.data.institutionId == getUserData().institutionId);
-      allow update: if hasRole('owner') || hasRole('supportStaff') || (hasRole('customer') && belongsToInstitution(resource.data.institutionId));
-      allow delete: if hasRole('owner');
-    }
-
+    // 19. COUNTERS — Internal use
     match /counters/{counterId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if isCRMStaff();
     }
 
-    // 8. DEFAULT SECURITY GUARD
+    // 20. DEFAULT SECURITY GUARD — deny all unlisted paths
     match /{document=**} {
-      allow read: if isReadOnlyCompliance();
+      allow read: if isSuperAdmin();
       allow write: if false;
     }
   }
