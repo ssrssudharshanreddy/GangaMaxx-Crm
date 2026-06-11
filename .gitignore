@@ -18,6 +18,14 @@ dist-ssr
 !.vscode/extensions.json
 .idea
 .DS_Store
+.agents/
+skills-lock.json
+dev-server.*.log
+
+# Firebase
+firebase-debug.log
+functions/
+.firebaserc
 *.suo
 *.ntvs*
 *.njsproj
