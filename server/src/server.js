@@ -1,9 +1,0 @@
-import app from './app.js';
-import dotenv from 'dotenv';
-dotenv.config();
-
-const PORT = process.env.PORT || 5001;
-
-app.listen(PORT, () => {
-  console.log(`GangaMaxx Customer Portal API is running on port ${PORT}`);
-});
