@@ -20,7 +20,7 @@ const statusColor = {
   blacklisted: 'bg-rose-50 text-rose-700',
 };
 
-export default function SuperAdminDashboard({ institutions, products, orders, invoices, payments, staff, tickets, quotations }) {
+export default function SuperAdminDashboard({ institutions, products, orders, invoices, payments, staff, tickets }) {
   
   // Row 1: Top-Level KPIs
   const totalCustomers = institutions.length;

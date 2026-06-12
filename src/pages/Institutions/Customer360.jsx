@@ -8,7 +8,6 @@ const currency = new Intl.NumberFormat('en-IN', { style: 'currency', currency: '
 export default function Customer360() {
   const institutions = useCollection('institutions');
   const orders = useCollection('orders');
-  const quotations = useCollection('quotations');
   const invoices = useCollection('invoices');
   const tickets = useCollection('tickets');
 
@@ -23,7 +22,6 @@ export default function Customer360() {
     if (!selectedInst) return null;
     const instName = selectedInst.name;
     const instOrders = orders.filter(o => o.institutionName === instName);
-    const instQuotes = quotations.filter(q => q.institutionName === instName);
     const instInvoices = invoices.filter(i => i.institutionName === instName);
     const instTickets = tickets.filter(t => t.institutionName === instName);
 
@@ -32,13 +30,12 @@ export default function Customer360() {
 
     return {
       orders: instOrders,
-      quotations: instQuotes,
       invoices: instInvoices,
       tickets: instTickets,
       totalSpent,
       outstanding
     };
-  }, [selectedInst, orders, quotations, invoices, tickets]);
+  }, [selectedInst, orders, invoices, tickets]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -81,14 +78,10 @@ export default function Customer360() {
             <Button variant="outline" onClick={() => setSelectedInst(null)}>← Back to Search</Button>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-3">
             <Card className="space-y-1">
               <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-[var(--text-tertiary)]"><ShoppingCart className="w-4 h-4"/> Total Orders</div>
               <div className="text-2xl font-bold text-[var(--text-primary)]">{customerData?.orders.length}</div>
-            </Card>
-            <Card className="space-y-1">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-[var(--text-tertiary)]"><FileText className="w-4 h-4"/> Quotations</div>
-              <div className="text-2xl font-bold text-[var(--text-primary)]">{customerData?.quotations.length}</div>
             </Card>
             <Card className="space-y-1">
               <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-[var(--text-tertiary)]"><DollarSign className="w-4 h-4"/> Total Spent</div>
@@ -120,25 +113,6 @@ export default function Customer360() {
               )}
             </Card>
             
-            <Card title="Recent Quotations">
-              {customerData?.quotations.length === 0 ? <p className="text-sm text-[var(--text-secondary)]">No quotations found.</p> : (
-                <div className="space-y-3">
-                  {customerData?.quotations.slice(0, 5).map(q => (
-                    <div key={q.id} className="flex justify-between items-center pb-2 border-b border-[var(--border)] last:border-0">
-                      <div>
-                        <div className="font-medium text-sm text-[var(--text-primary)]">{q.quotationNumber || q.id}</div>
-                        <div className="text-xs text-[var(--text-secondary)]">{q.createdAt}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-semibold text-sm">{currency.format(q.total || 0)}</div>
-                        <Badge type={q.status} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Card>
-
             <Card title="Support Tickets">
               {customerData?.tickets.length === 0 ? <p className="text-sm text-[var(--text-secondary)]">No tickets found.</p> : (
                 <div className="space-y-3">

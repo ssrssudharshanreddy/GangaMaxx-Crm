@@ -47,7 +47,6 @@ const navSections = [
       { name: 'Business Calendar', path: '/business-calendar', icon: CalendarDays,  key: 'businessCalendar' },
       { name: 'Follow-Ups',      path: '/follow-ups',      icon: CalendarDays,  key: 'followUps' },
       { name: 'Visits',          path: '/visit-logs',      icon: MapPin,        key: 'visitLogs' },
-      { name: 'Quotations',      path: '/quotations',      icon: FileText,      key: 'quotations' },
       { name: 'Orders',          path: '/orders',          icon: ShoppingCart,  key: 'orders' },
     ],
   },

@@ -30,7 +30,7 @@ const statusColor = {
   'Additional Information Required': 'bg-amber-50 text-amber-700'
 };
 
-export default function SalesExecutiveDashboard({ institutions, products, orders, invoices, payments, staff, tickets, quotations, followUps, visitLogs }) {
+export default function SalesExecutiveDashboard({ institutions, products, orders, invoices, payments, staff, tickets, followUps, visitLogs }) {
   const { user } = useAuth();
   const notifications = useCollection('notifications');
 
@@ -83,31 +83,23 @@ export default function SalesExecutiveDashboard({ institutions, products, orders
       if (v.salesmanId && data[v.salesmanId]) data[v.salesmanId].Visits += 1;
     });
 
-    quotations.filter(q => (q.createdAt || '').startsWith(currentMonthStr)).forEach(q => {
-      if (q.salesmanId && data[q.salesmanId]) data[q.salesmanId].Quotes += 1;
-    });
-
     orders.filter(o => (o.createdAt || '').startsWith(currentMonthStr)).forEach(o => {
       if (o.salesmanId && data[o.salesmanId]) data[o.salesmanId].Orders += 1;
     });
 
     return Object.values(data).sort((a, b) => b.Orders - a.Orders);
-  }, [salesTeam, visitLogs, quotations, orders, currentMonthStr]);
-
-  // Quotation Activity
-  const recentQuotations = useMemo(() => quotations.slice(0, 5), [quotations]);
+  }, [salesTeam, visitLogs, orders, currentMonthStr]);
 
   // Recent Activities
   const recentActivity = useMemo(() => (
     [
       ...orders.map((item) => ({ type: 'Order', title: item.orderNumber || item.id, status: item.status, date: item.createdAt })),
       ...institutions.map((item) => ({ type: 'Application', title: item.name, status: item.status, date: item.createdAt })),
-      ...quotations.map((item) => ({ type: 'Quote', title: item.quotationNumber || item.id, status: item.status, date: item.createdAt })),
     ]
       .filter((item) => item.date)
       .sort((a, b) => String(b.date).localeCompare(String(a.date)))
       .slice(0, 6)
-  ), [orders, institutions, quotations]);
+  ), [orders, institutions]);
 
   // Business Calendar (Upcoming Follow-ups & Visits)
   const upcomingEvents = useMemo(() => {
@@ -240,27 +232,6 @@ export default function SalesExecutiveDashboard({ institutions, products, orders
                   <div className="text-sm font-semibold text-[var(--text-primary)]">{evt.eventType}</div>
                   <div className="text-[11px] text-[var(--text-secondary)]">{evt.institutionName || 'Lead'} • {evt.assignedSalesmanName || evt.salesmanName || 'Unassigned'}</div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        {/* Quotation Activity */}
-        <Card className="space-y-4 lg:col-span-1">
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">Quotation Activity</h2>
-            <p className="text-sm text-[var(--text-secondary)]">Recent quotes by the sales team.</p>
-          </div>
-          <div className="space-y-3">
-            {recentQuotations.length === 0 ? (
-              <p className="text-sm text-[var(--text-secondary)]">No recent quotations.</p>
-            ) : recentQuotations.map((q) => (
-              <div key={q.id} className="flex items-center justify-between gap-2 border-b border-[var(--border)] pb-3 last:border-0 last:pb-0">
-                <div>
-                  <div className="text-sm font-medium text-[var(--text-primary)]">{q.institutionName}</div>
-                  <div className="text-[11px] text-[var(--text-secondary)]">{q.quotationNumber || q.id} • {currency.format(q.total || 0)}</div>
-                </div>
-                <Badge text={q.status} color={statusColor[q.status] || 'bg-slate-100 text-slate-700'} />
               </div>
             ))}
           </div>

@@ -33,7 +33,6 @@ export const MENU_PERMISSIONS = {
   businessCalendar:  [ROLES.SALES_EXECUTIVE, ROLES.SALESMAN],
   followUps:         [ROLES.SALESMAN],
   visitLogs:         [ROLES.SALESMAN],
-  quotations:        [ROLES.SALESMAN],
   orders:            [ROLES.WAREHOUSE_EXECUTIVE, ROLES.WAREHOUSE_STAFF],
   deliveries:        [ROLES.WAREHOUSE_EXECUTIVE, ROLES.WAREHOUSE_STAFF],
   returns:           [ROLES.WAREHOUSE_EXECUTIVE],
@@ -62,7 +61,6 @@ export const PAGE_PERMISSIONS = {
   '/business-calendar':[ROLES.SALES_EXECUTIVE, ROLES.SALESMAN],
   '/follow-ups':       [ROLES.SALESMAN],
   '/visit-logs':       [ROLES.SALESMAN],
-  '/quotations':       [ROLES.SALESMAN],
   '/orders':           [ROLES.WAREHOUSE_EXECUTIVE, ROLES.WAREHOUSE_STAFF],
   '/deliveries':       [ROLES.WAREHOUSE_EXECUTIVE, ROLES.WAREHOUSE_STAFF],
   '/returns':          [ROLES.WAREHOUSE_EXECUTIVE],
@@ -112,14 +110,6 @@ export const ACTION_PERMISSIONS = {
   'orders.approve':              [ROLES.SALES_EXECUTIVE],
   'orders.cancel':               [ROLES.SALES_EXECUTIVE],
   'orders.export':               [ROLES.SUPER_ADMIN, ROLES.SALES_EXECUTIVE, ROLES.ACCOUNTS_EXECUTIVE],
-
-  // Quotations
-  'quotations.create':           [ROLES.SALESMAN],
-  'quotations.read':             [ROLES.SALES_EXECUTIVE, ROLES.SALESMAN],
-  'quotations.update':           [ROLES.SALES_EXECUTIVE],
-  'quotations.approve':          [ROLES.SALES_EXECUTIVE],
-  'quotations.convert_to_order': [ROLES.SALES_EXECUTIVE],
-  'quotations.export':           [ROLES.SUPER_ADMIN, ROLES.SALES_EXECUTIVE],
 
   // Invoices
   'invoices.create':             [ROLES.ACCOUNTS_EXECUTIVE],
@@ -223,12 +213,6 @@ export const FIRESTORE_PERMISSIONS = {
     read:    ALL_ROLES,
     update:  [ROLES.SALES_EXECUTIVE, ROLES.ACCOUNTS_EXECUTIVE, ROLES.WAREHOUSE_EXECUTIVE, ROLES.WAREHOUSE_STAFF],
     delete:  [],                   // Archive Only
-  },
-  quotations: {
-    create:  [ROLES.SALES_EXECUTIVE, ROLES.SALESMAN],
-    read:    [ROLES.SALES_EXECUTIVE, ROLES.SALESMAN],
-    update:  [ROLES.SALES_EXECUTIVE],
-    delete:  [],
   },
   invoices: {
     create:  [ROLES.ACCOUNTS_EXECUTIVE],

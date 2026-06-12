@@ -25,7 +25,6 @@ const InventoryManagement  = lazy(() => import('./pages/Inventory/InventoryManag
 const ProcurementManagement= lazy(() => import('./pages/Procurement/ProcurementManagement'));
 const Orders               = lazy(() => import('./pages/Orders/Orders'));
 const DeliveryManagement   = lazy(() => import('./pages/Orders/DeliveryManagement'));
-const QuotationManagement  = lazy(() => import('./pages/Quotations/QuotationManagement'));
 const CreditAccounts       = lazy(() => import('./pages/Billing/CreditAccounts'));
 const InvoiceManagement    = lazy(() => import('./pages/Billing/InvoiceManagement'));
 const PaymentManagement    = lazy(() => import('./pages/Billing/PaymentManagement'));
@@ -119,11 +118,6 @@ const DashboardLayout = () => {
               } />
               <Route path="visit-logs" element={
                 <ProtectedRoute routePath="/visit-logs"><VisitLogs /></ProtectedRoute>
-              } />
-
-              {/* Quotations — Sales chain */}
-              <Route path="quotations" element={
-                <ProtectedRoute routePath="/quotations"><QuotationManagement /></ProtectedRoute>
               } />
 
               {/* Orders — All ops roles */}

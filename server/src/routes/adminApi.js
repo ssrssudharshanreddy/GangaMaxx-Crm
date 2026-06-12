@@ -3,7 +3,7 @@ import { db } from '../config/firebase.js';
 import { authenticate } from '../middlewares/auth.js';
 import { logAuditAction } from '../utils/audit.js';
 import { sendTransactionalEmail } from '../utils/mailer.js';
-import { OrderTransitionSchema, QuotationTransitionSchema, ReturnTransitionSchema, InstitutionTransitionSchema } from '../validation/workflowValidators.js';
+import { OrderTransitionSchema, ReturnTransitionSchema, InstitutionTransitionSchema } from '../validation/workflowValidators.js';
 import { auth } from '../config/firebase.js';
 import { OrdersRepository } from '../repositories/ordersRepository.js';
 const router = Router();
@@ -47,27 +47,12 @@ router.post('/:collection', async (req, res, next) => {
     const { collection } = req.params;
     const data = req.body;
     
-    const operationalCollections = ['orders', 'quotations', 'invoices', 'payments', 'products', 'inventory', 'creditAccounts', 'returns', 'deliveries', 'procurement'];
+    const operationalCollections = ['orders', 'invoices', 'payments', 'products', 'inventory', 'creditAccounts', 'returns', 'deliveries', 'procurement'];
     if (req.user.role === 'Super Admin' && operationalCollections.includes(collection)) {
       return res.status(403).json({ error: `Forbidden: Super Admin cannot create ${collection}` });
     }
     if (req.user.role === 'Super Admin' && collection === 'institutions') {
       return res.status(403).json({ error: 'Forbidden: Super Admin cannot create institutions' });
-    }
-    
-    if (collection === 'quotations') {
-      if (req.user.role === 'Salesman') {
-        const items = data.items || [];
-        for (const item of items) {
-          const productRef = await db.collection('products').where('name', '==', item.productName).get();
-          if (!productRef.empty) {
-            const basePrice = productRef.docs[0].data().basePrice;
-            if (item.unitPrice < basePrice) {
-              return res.status(403).json({ error: `Forbidden: Salesman cannot quote below base price for ${item.productName}` });
-            }
-          }
-        }
-      }
     }
 
     // Auto-generate ID if needed, or let Firestore generate it
@@ -296,7 +281,7 @@ router.put('/:collection/:id', async (req, res, next) => {
     const { collection, id } = req.params;
     const data = req.body;
 
-    const operationalCollections = ['orders', 'quotations', 'invoices', 'payments', 'products', 'inventory', 'creditAccounts', 'returns', 'deliveries', 'procurement'];
+    const operationalCollections = ['orders', 'invoices', 'payments', 'products', 'inventory', 'creditAccounts', 'returns', 'deliveries', 'procurement'];
     if (req.user.role === 'Super Admin' && operationalCollections.includes(collection)) {
       return res.status(403).json({ error: `Forbidden: Super Admin cannot modify ${collection}` });
     }
@@ -353,11 +338,6 @@ router.put('/:collection/:id', async (req, res, next) => {
           if (data.status === 'Approved') {
             sendTransactionalEmail(currentData.customerEmail || 'customer@example.com', `Order ${id} Approved`, `Your order has been approved by our team and is being processed for dispatch.`);
           }
-        } else if (collection === 'quotations') {
-          QuotationTransitionSchema.parse(transitionPayload);
-          if (data.status === 'sent') {
-            sendTransactionalEmail(currentData.customerEmail || 'customer@example.com', `New Quotation: ${id}`, `A new quotation has been generated for you. Please review and approve it on the customer portal.`);
-          }
         } else if (collection === 'returns') {
           ReturnTransitionSchema.parse(transitionPayload);
           if (data.status === 'Approved_For_Credit') {
@@ -381,22 +361,6 @@ router.put('/:collection/:id', async (req, res, next) => {
         }
       } catch (zodError) {
         return res.status(400).json({ error: 'Invalid state transition', details: zodError.errors || zodError.message });
-      }
-    }
-
-    // Pricing verification check
-    if (collection === 'quotations') {
-      if (req.user.role === 'Salesman') {
-        const items = data.items || [];
-        for (const item of items) {
-          const productRef = await db.collection('products').where('name', '==', item.productName).get();
-          if (!productRef.empty) {
-            const basePrice = productRef.docs[0].data().basePrice;
-            if (item.unitPrice < basePrice) {
-              return res.status(403).json({ error: `Forbidden: Salesman cannot modify price below base price for ${item.productName}` });
-            }
-          }
-        }
       }
     }
 

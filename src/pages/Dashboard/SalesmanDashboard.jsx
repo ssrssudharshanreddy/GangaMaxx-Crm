@@ -3,12 +3,11 @@ import { Card } from '../../components/ui/ui-components';
 import { useAuth } from '../../context/AuthContext';
 import { format, isSameMonth, parseISO } from 'date-fns';
 
-export default function SalesmanDashboard({ institutions, quotations, followUps, returns, visitLogs, orders, payments, invoices }) {
+export default function SalesmanDashboard({ institutions, followUps, returns, visitLogs, orders, payments, invoices }) {
   const { user } = useAuth();
 
   // Filter for assigned data
   const myInstitutions = useMemo(() => institutions.filter(i => i.assignedSalesmanId === user?.id || i.assignedSalesmanEmail === user?.email), [institutions, user]);
-  const myQuotations = useMemo(() => quotations.filter(q => q.salesmanId === user?.id || q.salesmanEmail === user?.email), [quotations, user]);
   const myReturns = useMemo(() => returns.filter(r => r.salesmanId === user?.id || r.salesmanEmail === user?.email), [returns, user]);
   const myFollowUps = useMemo(() => followUps.filter(f => f.assignedTo === user?.id || f.assignedEmail === user?.email), [followUps, user]);
 
@@ -19,10 +18,6 @@ export default function SalesmanDashboard({ institutions, quotations, followUps,
   const activeCustomers = myInstitutions.filter(i => i.status === 'Activated').length;
   const newCustomers = myInstitutions.filter(i => (i.createdAt || '').startsWith(currentMonthStr)).length;
   
-  const pendingQuotations = myQuotations.filter(q => q.status === 'draft' || q.status === 'sent').length;
-  const acceptedQuotations = myQuotations.filter(q => q.status === 'accepted').length;
-  const rejectedQuotations = myQuotations.filter(q => q.status === 'rejected').length;
-
   const pendingFollowUps = myFollowUps.filter(f => f.status === 'pending').length;
   const pendingReturns = myReturns.filter(r => r.status === 'pending').length;
 
@@ -62,26 +57,7 @@ export default function SalesmanDashboard({ institutions, quotations, followUps,
         </Card>
       </div>
 
-      {/* Row 2: Operations */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="space-y-1 border-l-4 border-l-amber-500">
-          <div className="text-xs uppercase tracking-widest text-[var(--text-tertiary)]">Pending Quotations</div>
-          <div className="text-2xl font-bold text-[var(--text-primary)]">{pendingQuotations}</div>
-          <div className="text-xs text-[var(--text-secondary)]">Awaiting customer response</div>
-        </Card>
-        <Card className="space-y-1 border-l-4 border-l-emerald-500">
-          <div className="text-xs uppercase tracking-widest text-[var(--text-tertiary)]">Accepted Quotations</div>
-          <div className="text-2xl font-bold text-[var(--text-primary)]">{acceptedQuotations}</div>
-          <div className="text-xs text-[var(--text-secondary)]">All time conversions</div>
-        </Card>
-        <Card className="space-y-1 border-l-4 border-l-rose-500">
-          <div className="text-xs uppercase tracking-widest text-[var(--text-tertiary)]">Rejected Quotations</div>
-          <div className="text-2xl font-bold text-[var(--text-primary)]">{rejectedQuotations}</div>
-          <div className="text-xs text-[var(--text-secondary)]">Lost deals</div>
-        </Card>
-      </div>
-
-      {/* Row 3: Tasks */}
+      {/* Row 2: Tasks */}
       <div className="grid gap-4 sm:grid-cols-2">
         <Card className="space-y-1 border-l-4 border-l-indigo-500">
           <div className="text-xs uppercase tracking-widest text-[var(--text-tertiary)]">Pending Follow-Ups</div>

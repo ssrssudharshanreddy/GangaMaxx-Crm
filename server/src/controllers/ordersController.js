@@ -39,30 +39,6 @@ export class OrdersController {
     }
   }
 
-  static async getQuotations(req, res, next) {
-    try {
-      const quotations = await OrdersRepository.getQuotationsByInstitution(req.user.institutionId);
-      res.json(quotations);
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  static async createQuotation(req, res, next) {
-    try {
-      const quoteData = req.body;
-      const createdQuote = await OrdersRepository.createQuotation({
-        ...quoteData,
-        institutionId: req.user.institutionId,
-        customerEmail: req.user.email,
-        customerId: req.user.uid,
-      });
-      res.status(201).json(createdQuote);
-    } catch (error) {
-      next(error);
-    }
-  }
-
   static async getReturns(req, res, next) {
     try {
       const returns = await ReturnsRepository.getReturnsByInstitution(req.user.institutionId);

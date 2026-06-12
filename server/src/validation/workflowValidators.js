@@ -59,18 +59,6 @@ export const OrderTransitionSchema = z.object({
   }
 });
 
-export const QuotationStateEnum = z.enum([
-  'draft', 'sent', 'accepted', 'rejected', 'expired', 'ordered'
-]);
-
-export const QuotationTransitionSchema = z.object({
-  fromState: QuotationStateEnum,
-  toState: QuotationStateEnum,
-  actorRole: z.string(),
-}).superRefine((val, ctx) => {
-  const { fromState, toState, actorRole } = val;
-});
-
 export const ReturnStateEnum = z.enum([
   'Requested', 'Approved', 'Rejected', 'Collected', 'Verified', 'Closed'
 ]);

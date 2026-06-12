@@ -11,7 +11,6 @@ export class FirestoreDatabaseService {
       institutions: [],
       notifications: [],
       orders: [],
-      quotations: [],
       invoices: [],
       payments: [],
       tickets: [],
@@ -108,7 +107,7 @@ export class FirestoreDatabaseService {
 
       // Parallel fetch of all CRM data resources from Shared Backend
       const [
-        staffRes, instRes, notifRes, orderRes, quoteRes, invRes,
+        staffRes, instRes, notifRes, orderRes, invRes,
         payRes, ticketRes, prodRes, procRes, visitRes, followRes,
         retRes, auditRes, creditRes, catRes
       ] = await Promise.all([
@@ -116,7 +115,6 @@ export class FirestoreDatabaseService {
         fetch(`${API_URL}/api/institutions`, { headers }),
         fetch(`${API_URL}/api/notifications`, { headers }),
         fetch(`${API_URL}/api/orders`, { headers }),
-        fetch(`${API_URL}/api/quotations`, { headers }),
         fetch(`${API_URL}/api/invoices`, { headers }),
         fetch(`${API_URL}/api/payments`, { headers }),
         fetch(`${API_URL}/api/tickets`, { headers }),
@@ -131,7 +129,7 @@ export class FirestoreDatabaseService {
       ]);
 
       // if unauthorized responses present, stop polling and sign out
-      const responses = [staffRes, instRes, notifRes, orderRes, quoteRes, invRes, payRes, ticketRes];
+      const responses = [staffRes, instRes, notifRes, orderRes, invRes, payRes, ticketRes];
       if (responses.some(r => r && (r.status === 401 || r.status === 403))) {
         this.stopPolling();
         this.clearCache();
@@ -143,7 +141,6 @@ export class FirestoreDatabaseService {
       if (instRes?.ok) { this.cache.institutions = await instRes.json(); DBNotifier.notify('institutions'); }
       if (notifRes?.ok) { this.cache.notifications = await notifRes.json(); DBNotifier.notify('notifications'); }
       if (orderRes?.ok) { this.cache.orders = await orderRes.json(); DBNotifier.notify('orders'); }
-      if (quoteRes?.ok) { this.cache.quotations = await quoteRes.json(); DBNotifier.notify('quotations'); }
       if (invRes?.ok) { this.cache.invoices = await invRes.json(); DBNotifier.notify('invoices'); }
       if (payRes?.ok) { this.cache.payments = await payRes.json(); DBNotifier.notify('payments'); }
       if (ticketRes?.ok) { this.cache.tickets = await ticketRes.json(); DBNotifier.notify('tickets'); }
@@ -167,7 +164,6 @@ export class FirestoreDatabaseService {
     return userId ? all.filter((item) => item.recipientId === userId) : all;
   }
   getOrders() { return this.cache.orders; }
-  getQuotations() { return this.cache.quotations; }
   getInvoices() { return this.cache.invoices; }
   getPayments() { return this.cache.payments; }
   getTickets() { return this.cache.tickets; }
@@ -380,36 +376,6 @@ export class FirestoreDatabaseService {
     if (!res.ok) {
       const err = await res.json();
       throw new Error(err.error || 'Failed to update order');
-    }
-    this.fetchAllData();
-  }
-
-  async addQuotation(quote) {
-    const headers = await this.getHeaders();
-    const res = await fetch(`${API_URL}/api/quotations`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(quote),
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to add quotation');
-    }
-    const data = await res.json();
-    this.fetchAllData();
-    return data;
-  }
-
-  async updateQuotation(id, updates) {
-    const headers = await this.getHeaders();
-    const res = await fetch(`${API_URL}/api/quotations/${id}`, {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify(updates),
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Failed to update quotation');
     }
     this.fetchAllData();
   }

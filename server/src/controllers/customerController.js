@@ -135,11 +135,10 @@ export class CustomerController {
         const instId = req.user.institutionId;
         if (!instId) return res.json({ message: 'No institution mapped' });
 
-        const [institution, creditAccount, orders, quotations, returns, notifications, timelines] = await Promise.all([
+        const [institution, creditAccount, orders, returns, notifications, timelines] = await Promise.all([
           CustomerRepository.getInstitution(instId),
           CustomerRepository.getCreditAccount(instId),
           OrdersRepository.getOrdersByInstitution(instId),
-          OrdersRepository.getQuotationsByInstitution(instId),
           ReturnsRepository.getReturnsByInstitution(instId),
           NotificationsRepository.getNotificationsByUser(req.user.uid),
           CustomerRepository.getTimelines(instId),
@@ -149,22 +148,19 @@ export class CustomerController {
           institution,
           creditAccount,
           recentOrders: orders.slice(0, 5),
-          recentQuotations: quotations.slice(0, 5),
           recentReturns: returns.slice(0, 5),
           notifications: notifications.slice(0, 5),
           timelines,
         });
       } else {
-        const [insts, orders, quotes, prods] = await Promise.all([
+        const [insts, orders, prods] = await Promise.all([
           db.collection('institutions').get(),
           db.collection('orders').get(),
-          db.collection('quotations').get(),
           db.collection('products').get(),
         ]);
         res.json({
           institutionsCount: insts.size,
           ordersCount: orders.size,
-          quotationsCount: quotes.size,
           productsCount: prods.size,
         });
       }

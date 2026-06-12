@@ -42,12 +42,9 @@ router.get('/products/:id', async (req, res, next) => {
   }
 });
 
-// Orders & Quotations & Returns
+// Orders & Returns
 router.get('/orders', OrdersController.getOrders);
 router.post('/orders', OrdersController.createOrder);
-
-router.get('/quotations', OrdersController.getQuotations);
-router.post('/quotations', OrdersController.createQuotation);
 
 router.get('/returns', OrdersController.getReturns);
 router.post('/returns', OrdersController.createReturn);

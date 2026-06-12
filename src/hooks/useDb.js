@@ -15,8 +15,6 @@ const getCollectionData = (collectionName) => {
       return db.getNotifications();
     case 'orders':
       return db.getOrders();
-    case 'quotations':
-      return db.getQuotations();
     case 'invoices':
       return db.getInvoices();
     case 'payments':

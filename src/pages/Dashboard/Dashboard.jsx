@@ -39,7 +39,6 @@ export default function DashboardPage() {
   const invoices = useCollection('invoices');
   const payments = useCollection('payments');
   const tickets = useCollection('tickets');
-  const quotations = useCollection('quotations');
   const visitLogs = useCollection('visitLogs');
   const followUps = useCollection('followUps');
   const returns = useCollection('returns');
@@ -96,11 +95,10 @@ export default function DashboardPage() {
   const pipeline = useMemo(
     () => [
       { name: 'Orders', value: orders.length },
-      { name: 'Quotes', value: quotations.length },
       { name: 'Invoices', value: invoices.length },
       { name: 'Tickets', value: tickets.length },
     ],
-    [orders, quotations, invoices, tickets]
+    [orders, invoices, tickets]
   );
 
   const recentActivity = useMemo(() => (
@@ -108,12 +106,11 @@ export default function DashboardPage() {
       ...orders.map((item) => ({ type: 'Order', title: item.orderNumber || item.id, status: item.status, date: item.createdAt })),
       ...invoices.map((item) => ({ type: 'Invoice', title: item.invoiceNumber || item.id, status: item.status, date: item.createdAt || item.dueDate })),
       ...tickets.map((item) => ({ type: 'Ticket', title: item.ticketNumber || item.subject || item.id, status: item.status, date: item.createdAt })),
-      ...quotations.map((item) => ({ type: 'Quote', title: item.quotationNumber || item.id, status: item.status, date: item.createdAt })),
     ]
       .filter((item) => item.date)
       .sort((a, b) => String(b.date).localeCompare(String(a.date)))
       .slice(0, 6)
-  ), [orders, invoices, tickets, quotations]);
+  ), [orders, invoices, tickets]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -123,14 +120,14 @@ export default function DashboardPage() {
       </div>
 
       {user?.role === ROLES.SUPER_ADMIN && (
-        <SuperAdminDashboard institutions={institutions} products={products} orders={orders} invoices={invoices} payments={payments} staff={staff} tickets={tickets} quotations={quotations} />
+        <SuperAdminDashboard institutions={institutions} products={products} orders={orders} invoices={invoices} payments={payments} staff={staff} tickets={tickets} />
       )}
 
       {user?.role === ROLES.SALES_EXECUTIVE && (
         <SalesExecutiveDashboard 
           institutions={institutions} products={products} orders={orders} 
           invoices={invoices} payments={payments} staff={staff} 
-          tickets={tickets} quotations={quotations} followUps={followUps} 
+          tickets={tickets} followUps={followUps} 
           visitLogs={visitLogs} 
         />
       )}
@@ -138,7 +135,6 @@ export default function DashboardPage() {
       {user?.role === ROLES.SALESMAN && (
         <SalesmanDashboard 
           institutions={institutions} 
-          quotations={quotations} 
           followUps={followUps} 
           returns={returns}
           visitLogs={visitLogs} 
@@ -182,7 +178,6 @@ export default function DashboardPage() {
           payments={payments}
           staff={staff}
           tickets={tickets}
-          quotations={quotations}
         />
       ) : (
         <>

@@ -53,36 +53,4 @@ export class OrdersRepository {
     await db.collection('orders').doc(orderNumber).set(finalOrder);
     return finalOrder;
   }
-
-  static async getQuotationsByInstitution(institutionId) {
-    const snapshot = await db.collection('quotations')
-      .where('institutionId', '==', institutionId)
-      .orderBy('createdAt', 'desc')
-      .limit(200)
-      .get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  }
-
-  static async createQuotation(quoteData) {
-    const nextVal = await this.getNextCounterValue('quotations');
-    const quoteNumber = `QT-${new Date().getFullYear()}-${String(nextVal).padStart(5, '0')}`;
-    const finalQuote = {
-      ...quoteData,
-      quoteNumber,
-      deletedAt: null,
-      status: 'draft',
-      createdAt: new Date().toISOString().slice(0, 10),
-      history: [{
-        state: 'draft',
-        timestamp: new Date().toISOString(),
-        actorId: quoteData.customerId || 'unknown',
-        actorEmail: quoteData.customerEmail || 'unknown',
-        actorRole: 'Customer',
-        remark: 'Quotation created via Customer Portal'
-      }],
-      remarks: 'Initial quotation drafted'
-    };
-    await db.collection('quotations').doc(quoteNumber).set(finalQuote);
-    return finalQuote;
-  }
 }

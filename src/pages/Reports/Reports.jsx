@@ -44,7 +44,6 @@ export default function Reports() {
   const procurement = useCollection('procurement');
   const returns = useCollection('returns');
   const staff = useCollection('staff');
-  const quotations = useCollection('quotations');
 
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -91,13 +90,6 @@ export default function Reports() {
       }
     });
 
-    filterByDate(quotations).forEach(q => {
-      if (q.salesmanId && data[q.salesmanId]) {
-        data[q.salesmanId].quotes += 1;
-        if (q.status === 'accepted') data[q.salesmanId].acceptedQuotes += 1;
-      }
-    });
-
     filterByDate(visitLogs).forEach(v => {
       if (v.salesmanId && data[v.salesmanId]) {
         data[v.salesmanId].visits += 1;
@@ -105,16 +97,9 @@ export default function Reports() {
     });
 
     return Object.values(data).sort((a, b) => b.revenue - a.revenue);
-  }, [activeSalesmen, filteredSalesOrders, quotations, visitLogs, filterByDate]);
+  }, [activeSalesmen, filteredSalesOrders, visitLogs, filterByDate]);
 
-  // 2. Quotation Analytics
-  const filteredQuotes = useMemo(() => filterBySalesman(filterByDate(quotations)), [quotations, filterByDate, filterBySalesman]);
-  const totalQuotes = filteredQuotes.length;
-  const acceptedQuotes = filteredQuotes.filter(q => q.status === 'accepted').length;
-  const quoteWinRate = totalQuotes > 0 ? Math.round((acceptedQuotes / totalQuotes) * 100) : 0;
-  const totalQuoteValue = filteredQuotes.reduce((s, q) => s + Number(q.total || 0), 0);
-
-  // 3. Customer Conversion Pipeline
+  // 2. Customer Conversion Pipeline
   const filteredInsts = useMemo(() => filterBySalesman(filterByDate(institutions), 'assignedSalesmanId'), [institutions, filterByDate, filterBySalesman]);
   const totalApps = filteredInsts.filter(i => i.status !== 'Draft').length;
   const approvedApps = filteredInsts.filter(i => ['Approved By Sales', 'Activated', 'Pending Finance Setup', 'Credit Assessment'].includes(i.status)).length;
@@ -145,14 +130,6 @@ export default function Reports() {
     downloadCSV(`sales-performance-${new Date().toISOString().slice(0,10)}.csv`,
       ['Salesman', 'Orders', 'Revenue', 'Quotes Sent', 'Quotes Accepted', 'Field Visits'],
       teamPerformance.map(s => [s.name, s.orders, s.revenue, s.quotes, s.acceptedQuotes, s.visits])
-    );
-  };
-
-  const exportQuotationData = () => {
-    logAuditAction(user, 'export_sales_report', 'Quotations');
-    downloadCSV(`quotations-${new Date().toISOString().slice(0,10)}.csv`,
-      ['Quote ID', 'Customer', 'Status', 'Total Value', 'Salesman'],
-      filteredQuotes.map(q => [q.id, q.institutionName, q.status, q.total, staff.find(s => s.id === q.salesmanId)?.name || 'Unknown'])
     );
   };
 
@@ -219,8 +196,7 @@ export default function Reports() {
             { name: 'Customer Approval Report', desc: 'Approved customers and turnaround times.' },
             { name: 'Customer Rejection Report', desc: 'Rejected applications with mandatory remarks.' },
             { name: 'Customer Growth Report', desc: 'Customer acquisition and onboarding trends.' },
-            { name: 'Salesman Performance Report', desc: 'Field visits, quotes, and order generation by salesman.' },
-            { name: 'Proposal Conversion Report', desc: 'Quotation acceptance and conversion analytics.' },
+            { name: 'Salesman Performance Report', desc: 'Field visits and order generation by salesman.' },
             { name: 'Customer Registration Report', desc: 'New self-registrations and salesman proposals.' },
             { name: 'Application Aging Report', desc: 'Time elapsed for pending and on-hold applications.' },
           ].map((report, idx) => (
@@ -241,8 +217,6 @@ export default function Reports() {
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {[
             { name: 'Customer Report', desc: 'Overview of all your assigned customers.' },
-            { name: 'Quotation Report', desc: 'Status of all your drafted and sent quotations.' },
-            { name: 'Quotation Conversion Report', desc: 'Analysis of your quotation win rates.' },
             { name: 'Follow-Up Report', desc: 'Summary of completed and pending follow-ups.' },
             { name: 'Visit Report', desc: 'Log of your field visits and activities.' },
             { name: 'Customer Growth Report', desc: 'New customer acquisition metrics.' },
