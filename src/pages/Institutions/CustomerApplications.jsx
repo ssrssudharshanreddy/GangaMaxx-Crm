@@ -6,7 +6,7 @@ import { FileText, CheckCircle, CheckCircle2, AlertTriangle, Clock, XCircle, Sea
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001';
+const API_URL = import.meta.env.VITE_API_URL || 'https://gangamaxx-backend-production.up.railway.app';
 
 const statusColor = {
   'Submitted': 'bg-violet-50 text-violet-700',

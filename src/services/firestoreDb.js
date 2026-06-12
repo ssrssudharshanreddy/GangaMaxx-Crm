@@ -2,7 +2,9 @@ import { DBNotifier } from './dbNotifier';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../config/firebase';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001';
+const API_URL = import.meta.env.VITE_API_URL || 'https://gangamaxx-backend-production.up.railway.app';
+
+const ensureArray = (value) => Array.isArray(value) ? value : [];
 
 export class FirestoreDatabaseService {
   constructor() {
@@ -137,44 +139,44 @@ export class FirestoreDatabaseService {
         return;
       }
 
-      if (staffRes?.ok) { this.cache.staff = await staffRes.json(); DBNotifier.notify('staff'); }
-      if (instRes?.ok) { this.cache.institutions = await instRes.json(); DBNotifier.notify('institutions'); }
-      if (notifRes?.ok) { this.cache.notifications = await notifRes.json(); DBNotifier.notify('notifications'); }
-      if (orderRes?.ok) { this.cache.orders = await orderRes.json(); DBNotifier.notify('orders'); }
-      if (invRes?.ok) { this.cache.invoices = await invRes.json(); DBNotifier.notify('invoices'); }
-      if (payRes?.ok) { this.cache.payments = await payRes.json(); DBNotifier.notify('payments'); }
-      if (ticketRes?.ok) { this.cache.tickets = await ticketRes.json(); DBNotifier.notify('tickets'); }
-      if (prodRes?.ok) { this.cache.products = await prodRes.json(); DBNotifier.notify('products'); }
-      if (procRes?.ok) { this.cache.procurement = await procRes.json(); DBNotifier.notify('procurement'); }
-      if (visitRes?.ok) { this.cache.visitLogs = await visitRes.json(); DBNotifier.notify('visitLogs'); }
-      if (followRes?.ok) { this.cache.followUps = await followRes.json(); DBNotifier.notify('followUps'); }
-      if (retRes?.ok) { this.cache.returns = await retRes.json(); DBNotifier.notify('returns'); }
-      if (auditRes?.ok) { this.cache.audits = await auditRes.json(); DBNotifier.notify('audits'); }
-      if (creditRes?.ok) { this.cache.creditAccounts = await creditRes.json(); DBNotifier.notify('creditAccounts'); }
-      if (catRes?.ok) { this.cache.categories = await catRes.json(); DBNotifier.notify('categories'); }
+      if (staffRes?.ok) { this.cache.staff = ensureArray(await staffRes.json()); DBNotifier.notify('staff'); }
+      if (instRes?.ok) { this.cache.institutions = ensureArray(await instRes.json()); DBNotifier.notify('institutions'); }
+      if (notifRes?.ok) { this.cache.notifications = ensureArray(await notifRes.json()); DBNotifier.notify('notifications'); }
+      if (orderRes?.ok) { this.cache.orders = ensureArray(await orderRes.json()); DBNotifier.notify('orders'); }
+      if (invRes?.ok) { this.cache.invoices = ensureArray(await invRes.json()); DBNotifier.notify('invoices'); }
+      if (payRes?.ok) { this.cache.payments = ensureArray(await payRes.json()); DBNotifier.notify('payments'); }
+      if (ticketRes?.ok) { this.cache.tickets = ensureArray(await ticketRes.json()); DBNotifier.notify('tickets'); }
+      if (prodRes?.ok) { this.cache.products = ensureArray(await prodRes.json()); DBNotifier.notify('products'); }
+      if (procRes?.ok) { this.cache.procurement = ensureArray(await procRes.json()); DBNotifier.notify('procurement'); }
+      if (visitRes?.ok) { this.cache.visitLogs = ensureArray(await visitRes.json()); DBNotifier.notify('visitLogs'); }
+      if (followRes?.ok) { this.cache.followUps = ensureArray(await followRes.json()); DBNotifier.notify('followUps'); }
+      if (retRes?.ok) { this.cache.returns = ensureArray(await retRes.json()); DBNotifier.notify('returns'); }
+      if (auditRes?.ok) { this.cache.audits = ensureArray(await auditRes.json()); DBNotifier.notify('audits'); }
+      if (creditRes?.ok) { this.cache.creditAccounts = ensureArray(await creditRes.json()); DBNotifier.notify('creditAccounts'); }
+      if (catRes?.ok) { this.cache.categories = ensureArray(await catRes.json()); DBNotifier.notify('categories'); }
     } catch (error) {
       console.error('Error fetching CRM data from Shared Backend:', error);
     }
   }
 
-  getStaff() { return this.cache.staff; }
-  getInstitutions() { return this.cache.institutions; }
+  getStaff() { return ensureArray(this.cache.staff); }
+  getInstitutions() { return ensureArray(this.cache.institutions); }
   getNotifications(userId) {
-    const all = this.cache.notifications || [];
+    const all = ensureArray(this.cache.notifications);
     return userId ? all.filter((item) => item.recipientId === userId) : all;
   }
-  getOrders() { return this.cache.orders; }
-  getInvoices() { return this.cache.invoices; }
-  getPayments() { return this.cache.payments; }
-  getTickets() { return this.cache.tickets; }
-  getProducts() { return this.cache.products; }
-  getProcurement() { return this.cache.procurement; }
-  getVisitLogs() { return this.cache.visitLogs; }
-  getFollowUps() { return this.cache.followUps; }
-  getReturns() { return this.cache.returns; }
-  getAudits() { return this.cache.audits; }
-  getCreditAccounts() { return this.cache.creditAccounts; }
-  getCategories() { return this.cache.categories; }
+  getOrders() { return ensureArray(this.cache.orders); }
+  getInvoices() { return ensureArray(this.cache.invoices); }
+  getPayments() { return ensureArray(this.cache.payments); }
+  getTickets() { return ensureArray(this.cache.tickets); }
+  getProducts() { return ensureArray(this.cache.products); }
+  getProcurement() { return ensureArray(this.cache.procurement); }
+  getVisitLogs() { return ensureArray(this.cache.visitLogs); }
+  getFollowUps() { return ensureArray(this.cache.followUps); }
+  getReturns() { return ensureArray(this.cache.returns); }
+  getAudits() { return ensureArray(this.cache.audits); }
+  getCreditAccounts() { return ensureArray(this.cache.creditAccounts); }
+  getCategories() { return ensureArray(this.cache.categories); }
 
   // Mutation operations routed via Shared Backend API
 

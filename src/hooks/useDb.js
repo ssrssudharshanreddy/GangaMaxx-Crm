@@ -48,7 +48,8 @@ export function useCollection(collectionName, queryFilter) {
     () => getCollectionData(collectionName),
     () => getCollectionData(collectionName)
   );
-  return useMemo(() => (queryFilter ? queryFilter(data) : data), [data, queryFilter]);
+  const safeData = Array.isArray(data) ? data : [];
+  return useMemo(() => (queryFilter ? queryFilter(safeData) : safeData), [safeData, queryFilter]);
 }
 
 export function useNotifications(userId) {
@@ -58,8 +59,9 @@ export function useNotifications(userId) {
     () => getCollectionData('notifications')
   );
 
+  const safeNotifications = Array.isArray(notifications) ? notifications : [];
   return useMemo(
-    () => (userId ? notifications.filter((item) => item.recipientId === userId) : notifications),
-    [notifications, userId]
+    () => (userId ? safeNotifications.filter((item) => item.recipientId === userId) : safeNotifications),
+    [safeNotifications, userId]
   );
 }
